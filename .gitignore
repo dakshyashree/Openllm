@@ -1,0 +1,31 @@
+# IDE and OS generated files
+.idea/
+.DS_Store
+Thumbs.db
+
+# Python specific ignores
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python/
+venv/
+env/
+.env
+# If you store sensitive environment variables here, like API keys
+
+# Jupyter Notebook specific
+.ipynb_checkpoints/
+
+# Application specific data/output
+document_index
+uploaded_files
+
+# Authentication and user data (for security and reproducibility)
+config.yaml
+# Assuming this might change frequently with user registrations
+users.yaml
+# Explicitly ignore, as it contains user credentials
+
+# Log files
+*.log
