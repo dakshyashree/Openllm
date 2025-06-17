@@ -1,0 +1,256 @@
+/*==============================================
+  STYLES.CSS
+  Techy, Smooth & Impressive Dark Theme
+==============================================*/
+
+/* Import Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=Roboto+Mono:wght@400;500&display=swap');
+
+/*----------------------------------------------
+  Color Variables (Deep & Neon Accents)
+----------------------------------------------*/
+:root {
+    --bg: #0d0d1a;
+    --card-bg: #1a1a2e;
+    --text: #e0e0e0;
+    --text-light: #a0a0a0;
+
+    --neon-primary: #8c55f6;
+    --neon-secondary: #00e5ff;
+    --neon-accent: #03dac6;
+
+    --border: #2a2a3f;
+    --shadow: rgba(0,0,0,0.7);
+    --input-bg: #121223;
+}
+
+/* Mirror for dark theme attr */
+[data-theme="dark"] {
+    /* same as root for full dark */
+}
+
+/*----------------------------------------------
+  Base Elements
+----------------------------------------------*/
+html, body, [data-testid="stAppViewContainer"] {
+    margin: 0;
+    padding: 0;
+    font-family: 'Roboto', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    overflow-x: hidden;
+    transition: background 0.5s ease, color 0.5s ease;
+}
+
+/* Subtle animated gradient behind content */
+body::before {
+    content: '';
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: linear-gradient(45deg, #0f0c29, #302b63, #24243e);
+    background-size: 400% 400%;
+    animation: bgAnimation 30s ease infinite;
+    z-index: -1;
+}
+
+@keyframes bgAnimation {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+/* Typography */
+h1 {
+    font-family: 'Roboto Mono', monospace;
+    font-size: 3rem;
+    text-align: center;
+    color: var(--neon-primary);
+    text-shadow: 0 0 8px var(--neon-primary);
+    margin: 1rem 0;
+}
+h2 {
+    font-size: 2.2rem;
+    text-align: center;
+    color: var(--neon-accent);
+    margin: 2rem 0 1rem;
+}
+h3 {
+    font-size: 1.6rem;
+    color: var(--text);
+    margin: 1.5rem 0 0.8rem;
+}
+p, label {
+    font-size: 1rem;
+    line-height: 1.6;
+    margin-bottom: 1rem;
+}
+
+/*----------------------------------------------
+  Cards & Containers
+----------------------------------------------*/
+
+.st-emotion-cache-nahz7x,
+div[data-testid="stForm"] > div,
+[data-testid="stVerticalBlock"] > div.st-emotion-cache-nahz7x {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 2.5rem;
+    margin: 2rem 0;
+    box-shadow: 0 8px 30px var(--shadow);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+.st-emotion-cache-nahz7x:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 12px 40px var(--shadow);
+}
+
+/*----------------------------------------------
+  Inputs
+----------------------------------------------*/
+.st-emotion-cache-vdzxz9 input,
+.st-emotion-cache-vdzxz9 textarea,
+.st-emotion-cache-vdzxz9 .stSelectbox {
+    width: 100%;
+    background: var(--input-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 0.9rem 1.4rem;
+    color: var(--text);
+    font-family: 'Roboto', sans-serif;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+.st-emotion-cache-vdzxz9 input:focus,
+.st-emotion-cache-vdzxz9 textarea:focus,
+.st-emotion-cache-vdzxz9 .stSelectbox:focus {
+    border-color: var(--neon-secondary);
+    box-shadow: 0 0 8px var(--neon-secondary);
+    outline: none;
+}
+.st-emotion-cache-vdzxz9 ::placeholder {
+    color: var(--text-light);
+}
+
+/*----------------------------------------------
+  Buttons
+----------------------------------------------*/
+.st-emotion-cache-use3lb button {
+    background: linear-gradient(135deg, var(--neon-primary), var(--neon-secondary));
+    color: #000;
+    border: none;
+    padding: 1rem 2rem;
+    font-size: 1.05rem;
+    font-weight: 700;
+    border-radius: 20px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.6);
+    cursor: pointer;
+    transition: background 0.5s ease, transform 0.3s ease;
+}
+.st-emotion-cache-use3lb button:hover {
+    background: linear-gradient(135deg, var(--neon-secondary), var(--neon-primary));
+    transform: scale(1.05);
+}
+.st-emotion-cache-use3lb button:active {
+    transform: scale(0.98);
+}
+
+/*----------------------------------------------
+  Alerts
+----------------------------------------------*/
+div[data-testid="stAlert"] {
+    border-radius: 12px;
+    padding: 1.5rem;
+    background: var(--card-bg);
+    box-shadow: 0 4px 20px var(--shadow);
+    margin-bottom: 1.5rem;
+    position: relative;
+    overflow: hidden;
+}
+div[data-testid="stAlert"]::before {
+    content: '';
+    position: absolute;
+    top: -50%; left: -50%;
+    width: 200%; height: 200%;
+    background: radial-gradient(circle, rgba(140,85,246,0.2) 0%, transparent 60%);
+    animation: pulse 3s ease infinite;
+}
+@keyframes pulse {
+    0%,100% { transform: scale(1); opacity: 0.5; }
+    50% { transform: scale(1.2); opacity: 0.2; }
+}
+
+/*----------------------------------------------
+  Sidebar Navigation
+----------------------------------------------*/
+.st-emotion-cache-1gh7q3p {
+    background: var(--card-bg);
+    border-right: 1px solid var(--border);
+    padding: 2rem;
+}
+.st-emotion-cache-1gh7q3p button {
+    background: transparent;
+    color: var(--text);
+    border: 2px solid var(--neon-primary);
+    border-radius: 12px;
+    padding: 0.8rem 1.5rem;
+    margin-bottom: 1rem;
+    font-size: 1rem;
+    transition: background 0.3s ease, color 0.3s ease;
+}
+.st-emotion-cache-1gh7q3p button:hover {
+    background: var(--neon-primary);
+    color: #000;
+}
+
+/*----------------------------------------------
+  Tabs & Expander
+----------------------------------------------*/
+.st-emotion-cache-ch5d7l button {
+    color: var(--text-light);
+    border-bottom: 2px solid transparent;
+    padding: 0.8rem 1.5rem;
+    font-size: 1rem;
+    transition: color 0.3s ease, border-bottom 0.3s ease;
+}
+.st-emotion-cache-ch5d7l button[aria-selected="true"] {
+    color: var(--neon-accent);
+    border-bottom: 2px solid var(--neon-accent);
+}
+.st-emotion-cache-s2s6p1,
+.st-emotion-cache-1fo623y {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 4px 15px var(--shadow);
+    transition: box-shadow 0.3s ease;
+}
+.st-emotion-cache-s2s6p1:hover,
+.st-emotion-cache-1fo623y:hover {
+    box-shadow: 0 6px 25px var(--shadow);
+}
+
+/*----------------------------------------------
+  File Uploader
+----------------------------------------------*/
+.stFileUploader {
+    background: var(--input-bg);
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    padding: 2rem;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+.stFileUploader:hover {
+    border-color: var(--neon-accent);
+    box-shadow: 0 0 10px var(--neon-accent);
+}
+.stFileUploader > div:first-child > div:first-child {
+    background: var(--neon-primary);
+    color: #000;
+    border-radius: 8px;
+    padding: 0.6rem 1.2rem;
+    transition: background 0.3s ease;
+}
+.stFileUploader > div:first-child > div:first-child:hover {
+    background: var(--neon-secondary);
+}

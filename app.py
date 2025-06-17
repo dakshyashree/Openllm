@@ -1,14 +1,13 @@
-# app.py
 from dotenv import load_dotenv
 import os
 import streamlit as st
 from pathlib import Path
+import yaml
 
 # Import authentication functions
-from auth import register_user, authenticate_user
+from auth import register_user, authenticate_user, change_password, get_all_users_status, update_user_status, delete_user # NEW: import delete_user
 
-# Import your existing RAG functionalities
-# Ensure these files and their dependencies (like OpenAI, Langchain, unstructured, pypdf, faiss-cpu) are installed
+# Import RAG functionalities
 from upload import upload_and_save_file
 from ingestion import ingest_to_faiss_per_file
 from agents.summarizer import summarize_file
@@ -22,296 +21,24 @@ load_dotenv()
 # --- Streamlit Page Configuration ---
 st.set_page_config(
     page_title="OpenLLM Platform",
-    page_icon="✨",  # A more modern, light icon
+    page_icon="✨",
     layout="centered",
     initial_sidebar_state="collapsed",
 )
 
-# --- Custom CSS for a highly professional and soothing look (Gemini-inspired) ---
-st.markdown("""
-<style>
-    /* General Page & Font Settings */
-    html, body, [data-testid="stAppViewContainer"] {
-        font-family: 'Google Sans', 'Roboto', 'Segoe UI', sans-serif; /* Prioritize Google Sans if available */
-        color: var(--text-color);
-        background-color: var(--background-color);
-    }
+# --- Inject Custom CSS from file ---
+styles_dir = Path("styles")
+styles_dir.mkdir(exist_ok=True)
+css_file_path = styles_dir / "style.css"
 
-    /* Load Google Fonts (if 'Google Sans' isn't natively available, Roboto is a good fallback) */
-    @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap');
+if not css_file_path.exists():
+    with open(css_file_path, "w") as f:
+        f.write("/* Add your CSS styles here */\n")
+    st.warning(f"'{css_file_path}' was not found and has been created. Please paste your CSS into it and restart the application.")
+    st.stop()
 
-
-    /* Streamlit's main content area padding and width */
-    .st-emotion-cache-1cypcdi { /* This targets the main content padding */
-        padding-top: 4rem; /* More generous top padding */
-        padding-bottom: 4rem; /* More generous bottom padding */
-        padding-left: 2rem; /* Adjusted horizontal padding for centered layout */
-        padding-right: 2rem;
-    }
-
-    /* Global Container styling for rounded corners on the overall content block */
-    .st-emotion-cache-nahz7x { /* Streamlit's main content wrapper (might vary, needs testing) */
-        border-radius: 20px; /* More rounded overall container */
-        overflow: hidden; /* Ensures content respects border radius */
-    }
-
-    /* Universal color variables for light and dark mode (Softer Palette) */
-    :root {
-        /* Light Mode (Softer, Gemini-like) */
-        --primary-color: #4285F4; /* Google Blue */
-        --secondary-color: #616262; /* Softer gray */
-        --background-color: #F8F9FA; /* Very light, almost off-white background */
-        --card-background: #FFFFFF; /* Pure white for subtle contrast on background */
-        --text-color: #3C4043; /* Google's dark text color */
-        --light-text-color: #5F6368; /* For secondary text/placeholders */
-        --border-color: #DADCE0; /* Very light gray border */
-        --accent-color: #34A853; /* Google Green for success */
-        --warning-color: #FBBC04; /* Google Yellow for warning */
-        --error-color: #EA4335; /* Google Red for error */
-        --shadow-color: rgba(60, 64, 67, 0.1); /* Subtle shadow for depth */
-    }
-
-    /* Dark Mode Overrides (Softer, Gemini-like) */
-    [data-theme="dark"] {
-        --primary-color: #8AB4F8; /* Lighter Google Blue for dark mode */
-        --secondary-color: #BDC1C6; /* Lighter gray */
-        --background-color: #202124; /* Google Dark Mode Background */
-        --card-background: #2D2E30; /* Slightly lighter card background for subtle depth */
-        --text-color: #CAD2DB; /* Softer light gray for main text */
-        --light-text-color: #9AA0A6; /* For secondary text/placeholders, a bit more muted */
-        --border-color: #5F6368; /* Darker, subtle border */
-        --accent-color: #81C995; /* Lighter Google Green */
-        --warning-color: #FDD663; /* Lighter Google Yellow */
-        --error-color: #F28B82; /* Lighter Google Red */
-        --shadow-color: rgba(0, 0, 0, 0.4); /* Darker shadow */
-    }
-
-    /* Main Header Styling */
-    h1 {
-        text-align: center;
-        color: var(--primary-color);
-        font-size: 3rem; /* Larger, more impactful */
-        margin-bottom: 0.5rem;
-        font-weight: 700; /* Bolder */
-        letter-spacing: -0.03em;
-    }
-
-    /* Subheader Styling */
-    h2 {
-        color: var(--text-color); /* General text color for subheaders */
-        font-size: 2rem;
-        border-bottom: none; /* No hard border below */
-        padding-bottom: 0.5rem;
-        margin-top: 3rem;
-        margin-bottom: 2rem;
-        text-align: center; /* Center these too */
-        font-weight: 500;
-    }
-
-    /* Section Headers */
-    h3 {
-        color: var(--text-color);
-        font-size: 1.6rem;
-        margin-top: 2rem;
-        margin-bottom: 1.5rem;
-        font-weight: 500;
-        text-align: left; /* Align these to left usually */
-    }
-
-    /* Paragraphs and general text */
-    p, label {
-        color: var(--text-color);
-        line-height: 1.7;
-        margin-bottom: 1rem;
-    }
-
-    /* Info/Instructions Text in general markdown */
-    div[data-testid="stMarkdownContainer"] p:not([class]) { /* Target generic markdown paragraphs, not those in alerts */
-        color: var(--light-text-color);
-        font-size: 0.95rem;
-        margin-bottom: 1.5rem;
-        text-align: center;
-    }
-
-    /* Form & Container Styling (Soothing Cards) */
-    div[data-testid="stForm"] > div,
-    [data-testid="stVerticalBlock"] > div.st-emotion-cache-nahz7x { /* Target Streamlit form elements and containers */
-        background-color: var(--card-background);
-        border: 1px solid var(--border-color);
-        border-radius: 16px; /* Softer rounded corners */
-        padding: 2.5rem 3rem; /* Increased padding inside forms/cards */
-        box-shadow: 0 4px 15px var(--shadow-color); /* Subtle, deeper shadow */
-        margin-bottom: 2.5rem; /* Space between sections */
-    }
-
-    /* Input Fields */
-    .st-emotion-cache-vdzxz9 input[type="text"],
-    .st-emotion-cache-vdzxz9 input[type="password"],
-    .st-emotion-cache-vdzxz9 textarea,
-    .st-emotion-cache-vdzxz9 .stSelectbox { /* Target Streamlit inputs, textareas, selectboxes */
-        border-radius: 12px; /* Consistent rounding */
-        border: 1px solid var(--border-color);
-        padding: 0.85rem 1.2rem; /* More comfortable padding */
-        background-color: var(--background-color); /* Slightly lighter background than card */
-        color: var(--text-color);
-        font-size: 1rem;
-        transition: border-color 0.2s ease, box-shadow 0.2s ease;
-    }
-    .st-emotion-cache-vdzxz9 input[type="text"]:focus,
-    .st-emotion-cache-vdzxz9 input[type="password"]:focus,
-    .st-emotion-cache-vdzxz9 textarea:focus,
-    .st-emotion-cache-vdzxz9 .stSelectbox:focus {
-        border-color: var(--primary-color);
-        box-shadow: 0 0 0 0.15rem rgba(66, 133, 244, 0.25); /* Google Blue shadow */
-        outline: none;
-    }
-    .st-emotion-cache-vdzxz9 input::placeholder,
-    .st-emotion-cache-vdzxz9 textarea::placeholder {
-        color: var(--light-text-color);
-        opacity: 0.7;
-    }
-
-
-    /* Buttons */
-    .st-emotion-cache-use3lb button { /* Targeting Streamlit buttons */
-        background-color: var(--primary-color);
-        color: white;
-        border-radius: 12px; /* Consistent rounding */
-        padding: 0.9rem 1.8rem; /* More generous padding */
-        font-weight: 600; /* Slightly bolder */
-        transition: background-color 0.2s ease, transform 0.1s ease, box-shadow 0.2s ease;
-        border: none;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-        font-size: 1rem;
-    }
-    .st-emotion-cache-use3lb button:hover {
-        background-color: #357AE8; /* Slightly darker Google Blue on hover */
-        transform: translateY(-2px); /* Slight lift effect */
-        box-shadow: 0 4px 10px rgba(0,0,0,0.2);
-    }
-    .st-emotion-cache-use3lb button:active {
-        transform: translateY(0); /* Reset on click */
-        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-    }
-
-    /* Alerts (Info, Success, Warning, Error) - Softer, Google-inspired colors */
-    div[data-testid="stAlert"] {
-        border-radius: 12px;
-        padding: 1.2rem 1.8rem;
-        font-weight: 500;
-        margin-bottom: 1.5rem;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.05); /* Subtle shadow for alerts */
-    }
-    /* IMPORTANT: Target the text inside alerts to override default Streamlit text color */
-    div[data-testid="stAlert"] [data-testid="stMarkdownContainer"] p {
-        margin-bottom: 0;
-        color: var(--text-color); /* Ensures text color uses our defined variable for better contrast */
-    }
-
-    .st-emotion-cache-10grl2h { /* Info alert background */
-        background-color: var(--card-background);
-        border-left: 5px solid var(--primary-color);
-    }
-    .st-emotion-cache-1a662z3 { /* Success alert background */
-        background-color: var(--card-background);
-        border-left: 5px solid var(--accent-color);
-    }
-    .st-emotion-cache-fcn1f7 { /* Warning alert background */
-        background-color: var(--card-background);
-        border-left: 5px solid var(--warning-color);
-    }
-    .st-emotion-cache-1wlbx07 { /* Error alert background */
-        background-color: var(--card-background);
-        border-left: 5px solid var(--error-color);
-    }
-
-    /* Spinner */
-    div[data-testid="stSpinner"] .st-emotion-cache-121u44h {
-        color: var(--primary-color); /* Spinner color */
-    }
-
-
-    /* Sidebar Styling */
-    .st-emotion-cache-1gh7q3p { /* Targeting sidebar background */
-        background-color: var(--card-background);
-        border-right: 1px solid var(--border-color);
-        box-shadow: 2px 0 10px rgba(0,0,0,0.05);
-        padding-top: 2rem;
-    }
-    .st-emotion-cache-1gh7q3p h3, .st-emotion-cache-1gh7q3p div { /* Text in sidebar */
-        color: var(--text-color);
-    }
-    .st-emotion-cache-1gh7q3p button { /* Buttons in sidebar */
-        background-color: var(--secondary-color); /* Use secondary color for sidebar buttons */
-        color: white;
-    }
-    .st-emotion-cache-1gh7q3p button:hover {
-        background-color: #5a6268;
-    }
-
-    /* Tabs Styling */
-    .st-emotion-cache-ch5d7l button { /* Tabs themselves */
-        background-color: var(--background-color);
-        color: var(--light-text-color); /* Softer text color for inactive tabs */
-        border-bottom: 2px solid transparent; /* No initial border */
-        font-weight: 500;
-        padding: 0.75rem 1.5rem; /* More padding */
-        border-radius: 12px 12px 0 0; /* Consistent rounding */
-        transition: color 0.2s ease, border-bottom 0.2s ease;
-    }
-    .st-emotion-cache-ch5d7l button[aria-selected="true"] {
-        color: var(--primary-color); /* Primary color for active tab */
-        border-bottom: 2px solid var(--primary-color);
-        background-color: var(--card-background); /* Card background for active tab */
-    }
-    .st-emotion-cache-ch5d7l { /* Tab container */
-        border-bottom: 1px solid var(--border-color); /* Subtle line under tabs */
-        margin-bottom: 2rem;
-    }
-
-    /* Expander Styling for history */
-    .st-emotion-cache-s2s6p1 { /* Target the expander header */
-        border: 1px solid var(--border-color);
-        border-radius: 12px;
-        background-color: var(--card-background);
-        padding: 0.8rem 1.2rem;
-        box-shadow: 0 1px 5px rgba(0,0,0,0.05); /* Subtle shadow */
-    }
-    .st-emotion-cache-s2s6p1:hover {
-        background-color: var(--background-color); /* Slightly change background on hover */
-    }
-    .st-emotion-cache-1fo623y { /* Expander content */
-        background-color: var(--card-background);
-        border: 1px solid var(--border-color);
-        border-top: none;
-        border-radius: 0 0 12px 12px;
-        padding: 1.5rem;
-        box-shadow: 0 1px 5px rgba(0,0,0,0.05);
-    }
-    .st-emotion-cache-1fo623y p { /* Text inside expander */
-        margin-bottom: 0.5rem;
-    }
-
-    /* Adjust specific Streamlit elements that might still have default styling */
-    .stFileUploader {
-        padding: 1.5rem;
-        border: 1px dashed var(--border-color);
-        border-radius: 12px;
-        background-color: var(--background-color);
-        margin-bottom: 1.5rem;
-    }
-    .stFileUploader label span {
-        color: var(--light-text-color);
-    }
-    .stFileUploader > div:first-child > div:first-child {
-        background-color: var(--primary-color);
-        color: white;
-        border-radius: 8px;
-        padding: 0.5rem 1rem;
-        font-weight: 500;
-    }
-</style>
-""", unsafe_allow_html=True)
+with open(css_file_path) as f:
+    st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
 # ────────────────────────────────────────────────────────────────────────────────
 # Session State Initialization for Authentication & RAG
@@ -322,12 +49,13 @@ if "username" not in st.session_state:
     st.session_state.username = None
 if "role" not in st.session_state:
     st.session_state.role = None
+if "page" not in st.session_state: # NEW: To manage current page
+    st.session_state.page = "Main App" # Default page
 
-# Initialize memory for RAG functionalities
 if "doc_qa_history" not in st.session_state:
-    st.session_state.doc_qa_history = []  # list of (stem, question, answer)
+    st.session_state.doc_qa_history = []
 if "global_qa_history" not in st.session_state:
-    st.session_state.global_qa_history = []  # list of (question, stem, answer)
+    st.session_state.global_qa_history = []
 
 
 # ────────────────────────────────────────────────────────────────────────────────
@@ -335,18 +63,18 @@ if "global_qa_history" not in st.session_state:
 # ────────────────────────────────────────────────────────────────────────────────
 def login_page():
     """
-    Renders the login interface with a professional layout.
+    Renders the login interface.
     """
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        st.markdown("<h2 style='text-align: center;'>🔑 Secure Access</h2>", unsafe_allow_html=True)
-        st.markdown("<p style='text-align: center;'>Please enter your credentials to access the OpenLLM platform.</p>",
+        st.markdown("<h2 style='text-align: center;'>Secure Access</h2>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center;'>Enter your credentials to access the platform.</p>",
                     unsafe_allow_html=True)
 
         with st.form("login_form"):
-            username = st.text_input("Username", key="login_username_input", placeholder="Enter your username")
+            username = st.text_input("Username", key="login_username_input", placeholder="Enter username")
             password = st.text_input("Password", type="password", key="login_password_input",
-                                     placeholder="Enter your password")
+                                     placeholder="Enter password")
 
             st.markdown("---")
             login_button = st.form_submit_button("Sign In", use_container_width=True)
@@ -358,24 +86,24 @@ def login_page():
                     st.session_state.logged_in = True
                     st.session_state.username = username
                     st.session_state.role = role
+                    st.session_state.page = "Main App" # Redirect to main app after login
                     st.rerun()
                 else:
                     st.error(message)
 
     st.markdown("---")
-    # This is the line that was hard to read, now the text color is inherited from var(--text-color)
-    st.info("💡 New to OpenLLM? Register for an account using the 'Register' tab.")
+    st.info("New to OpenLLM? Register for an account using the 'Register' tab.")
 
 
 def register_page():
     """
-    Renders the registration interface with a professional layout.
+    Renders the registration interface.
     """
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        st.markdown("<h2 style='text-align: center;'>📝 Create OpenLLM Account</h2>", unsafe_allow_html=True)
+        st.markdown("<h2 style='text-align: center;'>Create OpenLLM Account</h2>", unsafe_allow_html=True)
         st.markdown(
-            "<p style='text-align: center;'>Join our platform by creating a new user account. Your role will be assigned automatically.</p>",
+            "<p style='text-align: center;'>Create a new user account. Your role will be assigned automatically.</p>",
             unsafe_allow_html=True)
 
         with st.form("register_form"):
@@ -384,6 +112,22 @@ def register_page():
             new_password = st.text_input("New Password", type="password", key="register_password_input",
                                          placeholder="Create a strong password")
 
+            # --- Logic to determine and display the role ---
+            users_file = Path("users.yaml")
+            current_users_data = {}
+            if users_file.exists():
+                try:
+                    with open(users_file, 'r') as f:
+                        current_users_data = yaml.safe_load(f) or {}
+                except yaml.YAMLError:
+                    st.warning("Could not read users.yaml to accurately determine next role. Assuming QA by default.")
+                    current_users_data = {"users": {}} # Ensure it's a dict for safety
+
+            current_users = current_users_data.get("users", {}) # Get the 'users' key
+            predicted_role = "admin" if not current_users else "qa_user"
+            st.info(f"You will be registered as: **{predicted_role.replace('_', ' ').capitalize()}**")
+            # --- End Logic ---
+
             st.markdown("---")
             register_button = st.form_submit_button("Register Account", use_container_width=True)
 
@@ -391,47 +135,132 @@ def register_page():
                 success, message = register_user(new_username, new_password)
                 if success:
                     st.success(message)
-                    # This info message text color should now be softer in dark mode
-                    st.info(
-                        "Account created successfully! You can now log in. The **first user registered becomes the Admin**, all subsequent users are **QA users**.")
                 else:
                     st.error(message)
 
     st.markdown("---")
-    # This info message text color should now be softer in dark mode
     st.info("Already have an OpenLLM account? Navigate to the 'Login' tab.")
 
 
 # ────────────────────────────────────────────────────────────────────────────────
-# Main Application Content (Visible after Login)
+# Admin User Management Page
 # ────────────────────────────────────────────────────────────────────────────────
-def main_rag_app():
+def admin_user_management_page():
     """
-    Displays the RAG functionalities based on the user's role.
+    Dedicated page for Admin User Management.
     """
-    st.sidebar.markdown("### User Profile")
-    st.sidebar.write(f"**Username:** `{st.session_state.username}`")
-    st.sidebar.write(f"**Role:** `{st.session_state.role.capitalize()}`")
-    st.sidebar.markdown("---")
+    st.markdown(f"<h1 style='text-align: center; color: var(--neon-accent);'>Admin User Management</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center;'>View and manage user accounts: activate, deactivate, or delete users.</p>", unsafe_allow_html=True)
+    st.markdown("---")
 
-    if st.sidebar.button("🚪 Logout", use_container_width=True):
-        st.session_state.logged_in = False
-        st.session_state.username = None
-        st.session_state.role = None
-        st.rerun()
+    users_data = get_all_users_status()
+    if users_data:
+        st.write("#### Current User Accounts")
+        user_list = []
+        for uname, info in users_data.items():
+            user_list.append({
+                "Username": uname,
+                "Role": info.get("role", "N/A").capitalize(),
+                "Active": "✅ Active" if info.get("active", True) else "❌ Inactive",
+                "Last Login": info.get("last_login", "N/A")
+            })
+        st.dataframe(user_list, use_container_width=True)
 
-    st.markdown(f"<h1 style='text-align: center; color: var(--primary-color);'>📚 OpenLLM Insight Platform</h1>",
+        st.markdown("---")
+        st.write("#### Change User Status")
+        col_select_status, col_status_toggle, col_button_status = st.columns([2, 1, 1])
+
+        with col_select_status:
+            # Prevent current admin from deactivating themselves via this control
+            users_to_manage_status = [u for u in users_data.keys()] # All users for selection
+            selected_user_status = st.selectbox("Select User for Status Change", options=users_to_manage_status, key="select_user_to_manage_status")
+        with col_status_toggle:
+            current_active_status = users_data.get(selected_user_status, {}).get("active", True)
+            new_status = st.checkbox(f"Set to Active", value=current_active_status, key=f"user_status_checkbox_{selected_user_status}")
+        with col_button_status:
+            st.write("") # For alignment
+            st.write("")
+            if st.button(f"Update Status", key=f"update_status_button_{selected_user_status}", use_container_width=True):
+                # Ensure an admin cannot deactivate themselves if they are the sole active admin
+                if selected_user_status == st.session_state.username and not new_status and users_data[selected_user_status]['role'] == 'admin':
+                    active_admins = [u for u, info in users_data.items() if info.get('role') == 'admin' and info.get('active', True) and u != selected_user_status]
+                    if not active_admins:
+                        st.error("You cannot deactivate your own admin account if you are the sole active administrator.")
+                    else:
+                        success, msg = update_user_status(selected_user_status, new_status)
+                        if success:
+                            st.success(msg)
+                            st.rerun() # Rerun to refresh the user list
+                        else:
+                            st.error(msg)
+                else:
+                    success, msg = update_user_status(selected_user_status, new_status)
+                    if success:
+                        st.success(msg)
+                        st.rerun() # Rerun to refresh the user list
+                    else:
+                        st.error(msg)
+
+        st.markdown("---")
+        st.write("#### Delete User")
+        col_select_delete, col_button_delete = st.columns([3, 1])
+
+        with col_select_delete:
+            # Prevent current admin from appearing in delete list to reinforce 'cannot delete self'
+            users_to_delete = [u for u in users_data.keys() if u != st.session_state.username]
+            if not users_to_delete:
+                st.info("No other users to delete.")
+            else:
+                selected_user_delete = st.selectbox("Select User to Delete", options=users_to_delete, key="select_user_to_delete")
+        with col_button_delete:
+            st.write("") # For alignment
+            st.write("")
+            if st.button(f"Delete {selected_user_delete}", key=f"delete_user_button_{selected_user_delete}", use_container_width=True, type="secondary"): # Use type="secondary" for delete button
+                if st.session_state.username == selected_user_delete: # Double check, though UI should prevent this
+                    st.error("You cannot delete your own account.")
+                elif users_data[selected_user_delete]['role'] == 'admin': # Additional check for deleting other admins
+                    active_admins_after_delete = [u for u, info in users_data.items() if info.get('role') == 'admin' and info.get('active', True) and u != selected_user_delete]
+                    if not active_admins_after_delete: # If no active admins remain after this deletion
+                        st.error(f"Cannot delete '{selected_user_delete}'. Deleting this admin would leave no active administrator account.")
+                    else:
+                        success, msg = delete_user(selected_user_delete, st.session_state.username)
+                        if success:
+                            st.success(msg)
+                            st.rerun()
+                        else:
+                            st.error(msg)
+                else: # Non-admin user deletion
+                    success, msg = delete_user(selected_user_delete, st.session_state.username)
+                    if success:
+                        st.success(msg)
+                        st.rerun()
+                    else:
+                        st.error(msg)
+    else:
+        st.info("No users registered yet.")
+
+    st.markdown("---")
+
+
+# ────────────────────────────────────────────────────────────────────────────────
+# Main Application Content (General RAG Page)
+# ────────────────────────────────────────────────────────────────────────────────
+def main_rag_app_page():
+    """
+    Displays the core RAG functionalities.
+    """
+    st.markdown(f"<h1 style='text-align: center; color: var(--neon-primary);'>OpenLLM Insight Platform</h1>",
                 unsafe_allow_html=True)
     st.markdown(
-        f"<p style='text-align: center; color: var(--text-color);'>Welcome, {st.session_state.username}! Your access level: <b>{st.session_state.role.capitalize()}</b></p>",
+        f"<p style='text-align: center; color: var(--text);'>Welcome, {st.session_state.username}. Your access level: <b>{st.session_state.role.capitalize()}</b></p>",
         unsafe_allow_html=True)
     st.markdown("---")
 
     # 1) Upload + per-file FAISS ingestion + summarization (Admin Only)
     if st.session_state.role == 'admin':
-        st.subheader("⬆️ Document Management & Ingestion")
+        st.subheader("Document Management & Ingestion")
         st.markdown(
-            "<p>Admins can upload new documents (PDF/TXT) to expand the knowledge base. The system will automatically ingest them for QA and generate summaries.</p>",
+            "<p>Administrators can upload new documents (PDF/TXT) to expand the knowledge base. The system will automatically ingest them for QA and generate summaries.</p>",
             unsafe_allow_html=True)
 
         with st.container(border=True):
@@ -440,13 +269,13 @@ def main_rag_app():
             if file_path:
                 stem = file_path.stem
 
-                st.info(f"▶️ Ingesting `{file_path.name}` into FAISS… This may take a moment.")
+                st.info(f"Ingesting `{file_path.name}` into FAISS. This may take a moment.")
                 try:
                     ingest_to_faiss_per_file(file_path, base_dir="document_index")
-                    st.success(f"✅ Ingestion complete! Document index created at `document_index/{stem}`.")
+                    st.success(f"Ingestion complete. Document index created at `document_index/{stem}`.")
                 except Exception as e:
-                    st.error(f"❌ Error during ingestion: {e}")
-                    st.stop()
+                    st.error(f"Error during ingestion: {e}")
+                    # st.stop() # Only stop if critical, otherwise allow app to continue with error message
 
                 # automatic summary
                 st.markdown("---")
@@ -455,29 +284,25 @@ def main_rag_app():
                 try:
                     summary = summarize_file(file_path)
                     st.markdown(summary)
-                    st.success("✅ Summary generated successfully.")
+                    st.success("Summary generated successfully.")
                 except Exception as e:
                     st.warning(
-                        f"⚠️ Summarization failed: {e}. Please ensure your summarizer agent is configured correctly.")
-    else:
-        st.subheader("🚫 Document Upload Access")
-        st.warning(
-            "You do not have permission to upload documents. This feature is restricted to **Admin** users to maintain data integrity.")
+                        f"Summarization failed: {e}. Ensure your summarizer agent is configured correctly.")
+        st.markdown("---")
 
-    st.markdown("---")
 
     # 2) Per-document QA via router (with memory) - Accessible to all logged-in users
     index_root = Path("document_index")
     available = [d.name for d in index_root.iterdir() if d.is_dir()] if index_root.exists() else []
 
-    st.subheader("🔎 Query Specific Documents")
+    st.subheader("Query Specific Documents")
     st.markdown("<p>Select a document from the dropdown to ask targeted questions and retrieve precise answers.</p>",
                 unsafe_allow_html=True)
 
     if available:
         with st.container(border=True):
             chosen = st.selectbox("Choose document for QA", options=available, key="qa_specific_doc_select",
-                                  help="Select a document you wish to query.")
+                                  help="Select a document to query.")
             question = st.text_input("Enter your question about the selected document:", key="qa_specific_doc_question",
                                      placeholder="e.g., What are the key findings?")
 
@@ -486,32 +311,32 @@ def main_rag_app():
                 matches = list(upload_dir.glob(f"{chosen}.*"))
                 if not matches:
                     st.error(
-                        f"No original uploaded file found for ‘{chosen}’. Please ensure it was uploaded correctly.")
+                        f"No original uploaded file found for ‘{chosen}’. Ensure it was uploaded correctly.")
                 else:
                     try:
                         with st.spinner(f"Analyzing '{chosen}' to find the answer..."):
                             answer = router(matches[0], question)
                             st.session_state.doc_qa_history.append((chosen, question, answer))
                             st.markdown(f"**Answer (from `{chosen}`):** \n{answer}")
-                            st.success("Query complete!")
+                            st.success("Query complete.")
                     except Exception as e:
-                        st.error(f"❌ QA Error: {e}. Please check the document and your question.")
+                        st.error(f"QA Error: {e}. Please check the document and your question.")
     else:
-        st.info("No documents are currently indexed for specific QA. Please upload some files first (Admin only).")
+        st.info("No documents are currently indexed for specific QA. Please upload files (Admin only).")
 
     # display memory
     if st.session_state.doc_qa_history:
-        st.write("#### 📝 Previous Per-Document Queries")
+        st.write("#### Previous Per-Document Queries")
         with st.expander("View Document-Specific Q&A History"):
-            for doc_stem, q, a in reversed(st.session_state.doc_qa_history):  # Show most recent first
+            for doc_stem, q, a in reversed(st.session_state.doc_qa_history):
                 st.markdown(f"**Document:** `{doc_stem}`\n**Q:** {q}  \n**A:** {a}")
                 st.markdown("---")
 
     st.markdown("---")
 
     # 3) 🌐 Global QA across all documents (with memory) - Accessible to all logged-in users
-    st.subheader("🌐 Global Knowledge Base Query")
-    st.markdown("<p>Ask a question across all available document summaries to get comprehensive insights.</p>",
+    st.subheader("Global Knowledge Base Query")
+    st.markdown("<p>Ask a question across all available document summaries to gain comprehensive insights.</p>",
                 unsafe_allow_html=True)
 
     with st.container(border=True):
@@ -522,7 +347,7 @@ def main_rag_app():
             summary_dir = Path("uploaded_files")
             summary_paths = list(summary_dir.glob("*.summary.txt"))
             if not summary_paths:
-                st.error("❌ No summary files found. Please ensure documents have been uploaded and summarized.")
+                st.error("No summary files found. Ensure documents have been uploaded and summarized.")
             else:
                 docs = []
                 for sp in summary_paths:
@@ -530,11 +355,11 @@ def main_rag_app():
                     stem = sp.stem.removesuffix(".summary")
                     docs.append(Document(page_content=text, metadata={"stem": stem}))
 
-                api_key = os.getenv("OPENAI_API_KEY")
+                api_key = os.getenv("OPENAI_KEY")
                 if not api_key:
                     st.error(
-                        "`OPENAI_API_KEY` environment variable is not set. Please set it to proceed with global QA.")
-                    st.stop()
+                        "`OPENAI_KEY` environment variable is not set. Please set it to proceed with global QA.")
+                    # st.stop() # Only stop if critical, otherwise allow app to continue with error message
 
                 try:
                     with st.spinner("Building global knowledge base and finding relevant information..."):
@@ -542,9 +367,9 @@ def main_rag_app():
                         vs = FAISS.from_documents(docs, embeddings)
                         retriever = vs.as_retriever()
 
-                        top = retriever.get_relevant_documents(general_q)[:1]  # Get top 1 relevant document
+                        top = retriever.get_relevant_documents(general_q)[:1]
                         if not top:
-                            st.warning("No relevant document found for your global question. Try rephrasing.")
+                            st.warning("No relevant document found for your global question. Consider rephrasing.")
                         else:
                             chosen_stem = top[0].metadata["stem"]
                             upload_dir = Path("uploaded_files")
@@ -555,27 +380,26 @@ def main_rag_app():
                             else:
                                 answer = router(matches[0], general_q)
                                 st.session_state.global_qa_history.append((general_q, chosen_stem, answer))
-                                st.markdown(f"**Best Match Document:** `{chosen_stem}`  \n**Answer:** {answer}")
-                                st.success("Global query complete!")
+                                st.markdown(f"**Best Match Document:** \n`{chosen_stem}` \n**Answer:** {answer}")
+                                st.success("Global query complete.")
                 except Exception as e:
-                    st.error(f"❌ Global QA Error: {e}. Ensure your OpenAI API key is valid and agents are working.")
+                    st.error(f"Global QA Error: {e}. Ensure your OpenAI API key is valid and agents are working.")
 
     # display global QA history
     if st.session_state.global_qa_history:
-        st.write("#### 🌟 Previous Global Queries")
+        st.write("#### Previous Global Queries")
         with st.expander("View Global Q&A History"):
-            for q, stem, a in reversed(st.session_state.global_qa_history):  # Show most recent first
+            for q, stem, a in reversed(st.session_state.global_qa_history):
                 st.markdown(f"**Q:** {q}  \n**Best Match:** `{stem}`  \n**A:** {a}")
                 st.markdown("---")
 
     st.markdown("---")
-    st.success("OpenLLM Insight Platform: Empowering knowledge discovery!")
+    st.success("OpenLLM Insight Platform: Empowering knowledge discovery.")
 
 
 # ────────────────────────────────────────────────────────────────────────────────
 # Main App Flow: Authentication vs. Main App
 # ────────────────────────────────────────────────────────────────────────────────
-# Display a welcoming header that appears before login/register tabs
 st.markdown("<h1 style='text-align: center; color: var(--primary-color);'>Welcome to OpenLLM</h1>",
             unsafe_allow_html=True)
 st.markdown(
@@ -584,14 +408,82 @@ st.markdown(
 st.markdown("---")
 
 if st.session_state.logged_in:
-    # If logged in, display the main RAG application content
-    main_rag_app()
-else:
-    # If not logged in, show login/register tabs for authentication
+    # --- Sidebar Navigation ---
+    st.sidebar.markdown("### Navigation")
+    # Determine which pages are available
+    pages = ["Main App"]
+    if st.session_state.role == 'admin':
+        pages.append("Admin User Management")
+
+    selected_page = st.sidebar.radio(
+        "Go to",
+        options=pages,
+        index=pages.index(st.session_state.page) if st.session_state.page in pages else 0, # Set default to current page
+        key="main_navigation_radio"
+    )
+    st.session_state.page = selected_page # Update session state with selected page
+
+    # --- Render Page Content Based on Selection ---
+    if st.session_state.page == "Main App":
+        main_rag_app_page()
+    elif st.session_state.page == "Admin User Management":
+        if st.session_state.role == 'admin': # Double-check role for admin page access
+            admin_user_management_page()
+        else:
+            st.error("Access Denied: You do not have permission to view this page.")
+            st.session_state.page = "Main App" # Redirect non-admins back
+            st.rerun()
+
+    # --- User Profile and Logout always visible in sidebar when logged in ---
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### User Profile")
+    st.sidebar.write(f"**Username:** `{st.session_state.username}`")
+    st.sidebar.write(f"**Role:** `{st.session_state.role.capitalize()}`")
+
+    # Moved logout and password change here to always be in sidebar regardless of selected page
+    with st.sidebar.expander("Change Password"):
+        st.write("Update your account password.")
+        current_password = st.text_input("Current Password", type="password", key="sidebar_current_password_input")
+        new_password = st.text_input("New Password", type="password", key="sidebar_new_password_input")
+        confirm_new_password = st.text_input("Confirm New Password", type="password", key="sidebar_confirm_new_password_input")
+
+        if st.button("Update Password", use_container_width=True, key="sidebar_update_password_button"):
+            if not current_password or not new_password or not confirm_new_password:
+                st.error("All password fields are required.")
+            elif new_password != confirm_new_password:
+                st.error("New password and confirmation do not match.")
+            elif len(new_password) < 6: # Simple password strength check
+                st.error("New password must be at least 6 characters long.")
+            else:
+                success, message = change_password(st.session_state.username, current_password, new_password)
+                if success:
+                    st.success(message)
+                    # Clear inputs after successful change by resetting session state keys
+                    st.session_state.sidebar_current_password_input = ""
+                    st.session_state.sidebar_new_password_input = ""
+                    st.session_state.sidebar_confirm_new_password_input = ""
+                    st.rerun() # Rerun to ensure inputs clear visibly
+                else:
+                    st.error(message)
+
+    st.sidebar.markdown("---")
+    if st.sidebar.button("Logout", use_container_width=True):
+        st.session_state.logged_in = False
+        st.session_state.username = None
+        st.session_state.role = None
+        st.session_state.page = "Main App" # Reset page on logout
+        st.rerun()
+
+else: # Not logged in
+    st.markdown("<h1 style='text-align: center; color: var(--primary-color);'>Welcome to OpenLLM</h1>",
+                unsafe_allow_html=True)
+    st.markdown(
+        "<p style='text-align: center; color: var(--text-color);'>Your secure gateway to powerful document intelligence.</p>",
+        unsafe_allow_html=True)
+    st.markdown("---")
     tab1, tab2 = st.tabs(["Login", "Register"])
 
     with tab1:
         login_page()
     with tab2:
         register_page()
-
