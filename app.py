@@ -4,6 +4,8 @@ import os
 import streamlit as st
 from pathlib import Path
 import yaml  # Used for reading users.yaml to get admin count for display
+import zipfile  # Import zipfile module for ZIP handling
+import shutil  # For removing directories
 
 # Import authentication functions
 from auth import (
@@ -32,7 +34,7 @@ load_dotenv()
 # --- Streamlit Page Configuration ---
 st.set_page_config(
     page_title="OpenLLM Platform",
-    page_icon="",  # Restored a meaningful icon
+    page_icon="✨",  # Restored a meaningful icon
     layout="centered",
     initial_sidebar_state="collapsed",
 )
@@ -83,7 +85,7 @@ def login_page():
     """
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        st.markdown("<h2 style='text-align: center;'> Secure Access</h2>", unsafe_allow_html=True)
+        st.markdown("<h2 style='text-align: center;'>Secure Access</h2>", unsafe_allow_html=True)
         st.markdown("<p style='text-align: center;'>Please enter your credentials to access the OpenLLM platform.</p>",
                     unsafe_allow_html=True)
 
@@ -312,12 +314,108 @@ def main_rag_app_page():
             unsafe_allow_html=True)
 
         with st.container(border=True):
-            st.markdown("### Upload Files")
-            # Calling the multi-file upload function
+            st.markdown("### Upload Documents")
+            st.info(
+                "To upload an entire folder of documents, please compress it into a **.zip file** and upload it below. This will unpack all contained files for processing.")
+
+            zip_file = st.file_uploader(
+                "Upload a folder as ZIP",
+                type="zip",
+                help="Compress your folder of documents into a single .zip file before uploading. All supported files inside will be processed.",
+                key="zip_uploader"
+            )
+
+            if zip_file:
+                # Create a temporary extraction directory within uploaded_files
+                # This temporary directory ensures isolation during extraction
+                zip_name_stem = Path(zip_file.name).stem  # get name without .zip
+                temp_extract_dir = Path("uploaded_files") / f"temp_zip_{zip_name_stem}_{os.urandom(4).hex()}"
+                temp_extract_dir.mkdir(parents=True, exist_ok=True)
+
+                st.info(f"Extracting '{zip_file.name}' to a temporary location for processing...")
+                try:
+                    with zipfile.ZipFile(zip_file, "r") as z:
+                        z.extractall(temp_extract_dir)  # Extracts with internal structure into temp_extract_dir
+
+                    # List all files extracted, including those in subdirectories
+                    files_to_process = [p for p in temp_extract_dir.rglob("*") if p.is_file()]
+                    st.success(f"Successfully extracted {len(files_to_process)} items from '{zip_file.name}'.")
+
+                    processed_count = 0
+                    failed_files = []
+
+                    # Target directory for the final flattened files
+                    target_upload_dir = Path("uploaded_files")
+
+                    for doc_path_in_temp_dir in files_to_process:
+                        # Construct the target path in the main uploaded_files directory
+                        # We use doc_path_in_temp_dir.name to get just the filename, effectively flattening the structure
+                        final_doc_path = target_upload_dir / doc_path_in_temp_dir.name
+
+                        # Handle potential filename conflicts (if a file with the same name already exists in uploaded_files)
+                        # Append a counter for uniqueness
+                        counter = 1
+                        original_final_doc_path = final_doc_path
+                        while final_doc_path.exists():
+                            final_doc_path = original_final_doc_path.parent / f"{original_final_doc_path.stem}_{counter}{original_final_doc_path.suffix}"
+                            counter += 1
+
+                        st.markdown(f"---")
+                        st.info(
+                            f"Processing extracted file: `{doc_path_in_temp_dir.relative_to(temp_extract_dir)}` (will be saved as `{final_doc_path.name}`)")
+
+                        try:
+                            # Move the file from the temporary extraction location to the flattened uploaded_files directory
+                            shutil.move(str(doc_path_in_temp_dir), str(final_doc_path))
+
+                            # Ingestion
+                            ingest_to_faiss_per_file(final_doc_path, base_dir="document_index")
+                            st.success(f"Ingested `{final_doc_path.name}` into FAISS.")
+
+                            # Always attempt summarization
+                            with st.spinner(f"Generating summary for `{final_doc_path.name}`..."):
+                                try:
+                                    summary = summarize_file(final_doc_path)
+                                    st.markdown(f"**Summary for `{final_doc_path.name}`:**\n{summary}")
+                                    st.success(f"Summary generated for `{final_doc_path.name}`.")
+                                except Exception as sum_e:
+                                    st.warning(
+                                        f"⚠ Summarization failed for `{final_doc_path.name}`: {sum_e}. Please ensure your summarizer agent can handle this file type.")
+
+                            processed_count += 1
+                        except Exception as e:
+                            st.error(f"Failed to process `{doc_path_in_temp_dir.name}`: {e}")
+                            failed_files.append(doc_path_in_temp_dir.name)
+                            continue
+
+                    if failed_files:
+                        st.warning(
+                            f"⚠ Completed ZIP processing with some failures. Failed files: {', '.join(failed_files)}")
+                    else:
+                        st.success(f"All {processed_count} files from '{zip_file.name}' processed successfully!")
+
+                except zipfile.BadZipFile:
+                    st.error("The uploaded file is not a valid ZIP archive.")
+                except Exception as e:
+                    st.error(f"An unexpected error occurred during ZIP extraction: {e}")
+                finally:
+                    # Always clean up the temporary extraction directory
+                    if temp_extract_dir.exists():
+                        st.info(f"Cleaning up temporary extracted directory: `{temp_extract_dir}`...")
+                        try:
+                            shutil.rmtree(temp_extract_dir)
+                            st.success("Temporary directory cleaned up.")
+                        except Exception as e:
+                            st.warning(f"⚠ Could not remove temporary directory `{temp_extract_dir}`: {e}")
+
+            st.markdown("---")
+            st.markdown("### Upload Individual Files")
+            st.info("Alternatively, you can select one or more individual files from different locations.")
+            # Existing multi-file uploader for individual files
             uploaded_file_paths: list[Path] = upload_and_save_files()
 
             if uploaded_file_paths:
-                st.write(f"Initiating processing for {len(uploaded_file_paths)} file(s)...")
+                st.write(f"Initiating processing for {len(uploaded_file_paths)} individual file(s)...")
                 for file_path in uploaded_file_paths:  # Iterate through each uploaded file
                     stem = file_path.stem
 
@@ -331,18 +429,18 @@ def main_rag_app_page():
                         # Continue to next file even if one fails
                         continue
 
-                    # automatic summary
-                    st.markdown("---")
-                    st.markdown(f"### Automatic Summary for `{file_path.name}`")
-                    st.write("Generating an automatic summary:")
-                    try:
-                        summary = summarize_file(file_path)
-                        st.markdown(summary)
-                        st.success(f"Summary generated successfully for `{file_path.name}`.")
-                    except Exception as e:
-                        st.warning(
-                            f"⚠ Summarization failed for `{file_path.name}`: {e}. Please ensure your summarizer agent is configured correctly.")
-                st.success("All selected files have been processed for ingestion and summarization (if applicable).")
+                    # Always attempt summarization
+                    with st.spinner(f"Generating summary for `{file_path.name}`..."):
+                        try:
+                            summary = summarize_file(file_path)
+                            st.markdown(f"**Summary for `{file_path.name}`:**\n{summary}")
+                            st.success(f"Summary generated for `{file_path.name}`.")
+                        except Exception as sum_e:
+                            st.warning(
+                                f"⚠ Summarization failed for `{file_path.name}`: {sum_e}. Please ensure your summarizer agent can handle this file type.")
+                st.success(
+                    "All selected individual files have been processed for ingestion and summarization (if applicable).")
+
         st.markdown("---")
     else:
         st.subheader("Document Upload Access")
@@ -353,7 +451,7 @@ def main_rag_app_page():
     index_root = Path("document_index")
     available = [d.name for d in index_root.iterdir() if d.is_dir()] if index_root.exists() else []
 
-    st.subheader("🔎 Query Specific Documents")
+    st.subheader("Query Specific Documents")
     st.markdown("<p>Select a document from the dropdown to ask targeted questions and retrieve precise answers.</p>",
                 unsafe_allow_html=True)
 
@@ -393,7 +491,7 @@ def main_rag_app_page():
 
     st.markdown("---")
 
-    # 3) 🌐 Global QA across all documents (with memory) - Accessible to all logged-in users
+    # 3) Global QA across all documents (with memory) - Accessible to all logged-in users
     st.subheader("Global Knowledge Base Query")
     st.markdown("<p>Ask a question across all available document summaries to gain comprehensive insights.</p>",
                 unsafe_allow_html=True)
