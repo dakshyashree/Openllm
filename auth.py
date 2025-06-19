@@ -1,156 +1,195 @@
+# auth.py
 import yaml
-from pathlib import Path
-import bcrypt
-from datetime import datetime
+import hashlib
+import os
+import datetime
 
-# Define the path to your users file
-USERS_FILE = Path("users.yaml")
+USERS_FILE = 'users.yaml'
+MAX_ADMIN_COUNT = 5  # Define the maximum number of admin users allowed
 
-def _load_users():
-    """Loads user data from the YAML file."""
-    if USERS_FILE.exists():
-        with open(USERS_FILE, 'r') as f:
-            return yaml.safe_load(f) or {"users": {}} # Ensure it returns a dict even if file is empty
-    return {"users": {}}
 
-def _save_users(users_data):
-    """Saves user data to the YAML file."""
+def load_users():
+    """
+    Loads user data from the users.yaml file.
+    If the file does not exist or is empty, it returns an empty dictionary.
+    """
+    if not os.path.exists(USERS_FILE) or os.stat(USERS_FILE).st_size == 0:
+        return {}
+    with open(USERS_FILE, 'r') as f:
+        users = yaml.safe_load(f)
+        return users if users is not None else {}
+
+
+def save_users(users):
+    """
+    Saves the provided user data to the users.yaml file.
+    """
     with open(USERS_FILE, 'w') as f:
-        yaml.safe_dump(users_data, f)
+        yaml.safe_dump(users, f, default_flow_style=False)
+
+
+def hash_password(password):
+    """
+    Hashes a password using SHA-256 for storage.
+    Note: For production, consider stronger hashing algorithms like bcrypt or Argon2
+    and a proper salt. This is simplified for demonstration.
+    """
+    return hashlib.sha256(password.encode()).hexdigest()
+
+
+def get_admin_count():
+    """
+    Counts the number of existing admin users.
+    Returns:
+        int: The current number of admin users.
+    """
+    users = load_users()
+    admin_count = sum(1 for user_data in users.values() if user_data.get('role') == 'admin')
+    return admin_count
+
+
+def register_user(username, password, desired_role):
+    """
+    Registers a new user with a specified role, enforcing the admin count limit.
+
+    Args:
+        username (str): The username for the new user.
+        password (str): The plain-text password for the new user.
+        desired_role (str): The role the user wishes to register as ('admin' or 'qa').
+    Returns:
+        tuple: (bool, str) - True and a success message if successful,
+               False and an error message otherwise.
+    """
+    if not username or not password:
+        return False, "Username and password cannot be empty."
+
+    users = load_users()
+
+    if username in users:
+        return False, "Registration failed: Username already exists."
+
+    if desired_role == 'admin':
+        current_admins = get_admin_count()
+        if current_admins >= MAX_ADMIN_COUNT:
+            # This message should ideally not be seen if UI prevents selection
+            return False, f"Registration failed: Maximum number of admin users ({MAX_ADMIN_COUNT}) reached. Cannot register as admin."
+
+    hashed_password = hash_password(password)
+    users[username] = {
+        'password': hashed_password,
+        'role': desired_role,
+        'active': True,  # New users are active by default
+        'created_at': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        'last_login': 'Never'
+    }
+    save_users(users)
+    return True, f"User '{username}' registered successfully as {desired_role}."
+
 
 def authenticate_user(username, password):
     """
-    Authenticates a user by checking their username, password, and active status.
-    Updates last login timestamp on success.
+    Authenticates a user and returns their role. Updates last_login timestamp.
+    Args:
+        username (str): The username to authenticate.
+        password (str): The plain-text password to authenticate.
+    Returns:
+        tuple: (bool, str, str | None) - True, success message, and role if successful;
+               False, error message, and None otherwise.
     """
-    users_data = _load_users()
-    users = users_data.get("users", {})
-    user_info = users.get(username)
+    if not username or not password:
+        return False, "Username and password cannot be empty.", None
 
-    if not user_info:
-        return False, "Invalid username or password.", None
-
-    # Check if the account is active
-    if not user_info.get("active", True): # Default to True for older entries without 'active' field
-        return False, "Account is currently inactive. Please contact an administrator.", None
-
-    hashed_password = user_info["password_hash"].encode('utf-8')
-    salt = user_info["salt"].encode('utf-8')
-
-    if bcrypt.checkpw(password.encode('utf-8'), hashed_password):
-        # Update last_login timestamp on successful login
-        user_info["last_login"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        _save_users(users_data)
-        return True, "Login successful.", user_info["role"]
-    else:
-        return False, "Invalid username or password.", None
-
-def register_user(username, password):
-    """
-    Registers a new user. The first registered user becomes an 'admin',
-    subsequent users are 'qa_user'. Sets new users as active by default.
-    """
-    users_data = _load_users()
-    users = users_data.get("users", {})
-
-    if username in users:
-        return False, "Username already exists."
-
-    salt = bcrypt.gensalt()
-    hashed_password = bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
-
-    # Assign role: first user is admin, others are qa_user
-    role = "admin" if not users else "qa_user"
-
-    users[username] = {
-        "password_hash": hashed_password,
-        "salt": salt.decode('utf-8'),
-        "role": role,
-        "active": True, # New users are active by default
-        "last_login": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    }
-    users_data["users"] = users
-    _save_users(users_data)
-    return True, f"User '{username}' registered successfully as {role}."
-
-def get_all_users_status():
-    """Retrieves a dictionary of all users and their details."""
-    users_data = _load_users()
-    return users_data.get("users", {})
-
-def update_user_status(username, new_status: bool): # Removed current_admin_username from signature as check is now in app.py
-    """
-    Updates the active status of a specific user.
-    """
-    users_data = _load_users()
-    users = users_data.get("users", {})
-
+    users = load_users()
     if username not in users:
-        return False, f"User '{username}' not found."
+        return False, "Login failed: Username not found.", None
 
-    # Safeguard for sole active admin is primarily in app.py now, this is a redundant backend check.
-    # if users[username]['role'] == 'admin' and not new_status: # If target is admin and being deactivated
-    #     active_admins = [u for u, info in users.items() if info.get('role') == 'admin' and info.get('active', True)]
-    #     if len(active_admins) == 1 and active_admins[0] == username:
-    #         return False, "Cannot deactivate the sole active administrator account."
+    user_data = users[username]
+    if not user_data.get('active', True):  # Check if user is active
+        return False, "Login failed: Account is inactive. Please contact an administrator.", None
 
-    users[username]["active"] = new_status
-    _save_users(users_data)
-    status_text = "activated" if new_status else "deactivated"
-    return True, f"User '{username}' has been {status_text}."
+    hashed_password_input = hash_password(password)
+    if user_data['password'] == hashed_password_input:
+        user_role = user_data.get('role', 'qa')  # Default to 'qa' if role not present
 
-def change_password(username, old_password, new_password):
+        # Update last_login timestamp
+        users[username]['last_login'] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        save_users(users)
+
+        return True, f"User '{username}' logged in successfully as {user_role}.", user_role
+    else:
+        return False, "Login failed: Incorrect password.", None
+
+
+def change_password(username, current_password, new_password):
     """
-    Allows a user to change their password after verifying the old password.
+    Changes a user's password.
+    Returns: (bool, message)
     """
-    users_data = _load_users()
-    users = users_data.get("users", {})
-    user_info = users.get(username)
-
-    if not user_info:
+    users = load_users()
+    if username not in users:
         return False, "User not found."
 
-    hashed_password = user_info["password_hash"].encode('utf-8')
-    salt = user_info["salt"].encode('utf-8')
+    if users[username]['password'] != hash_password(current_password):
+        return False, "Incorrect current password."
 
-    # Verify old password
-    if not bcrypt.checkpw(old_password.encode('utf-8'), hashed_password):
-        return False, "Incorrect old password."
-
-    # Hash the new password
-    new_salt = bcrypt.gensalt()
-    new_hashed_password = bcrypt.hashpw(new_password.encode('utf-8'), new_salt).decode('utf-8')
-
-    # Update user info with new password and salt
-    user_info["password_hash"] = new_hashed_password
-    user_info["salt"] = new_salt.decode('utf-8')
-    users_data["users"] = users # Ensure updated user_info is stored back
-    _save_users(users_data)
+    users[username]['password'] = hash_password(new_password)
+    save_users(users)
     return True, "Password changed successfully."
 
-# --- NEW FUNCTION TO DELETE USER ---
-def delete_user(username_to_delete: str, acting_admin_username: str):
+
+def get_all_users_status():
     """
-    Deletes a user from the users.yaml file.
-    Includes safeguards: Admin cannot delete themselves or the sole admin.
+    Retrieves status of all users, including role, active status, and last login.
+    Returns: dict of {username: {role: str, active: bool, last_login: str, ...}}
     """
-    users_data = _load_users()
-    users = users_data.get("users", {})
+    users = load_users()
+    # Ensure 'active' status is present, default to True for display
+    # Also ensure last_login and created_at are present
+    for user_data in users.values():
+        user_data.setdefault('active', True)
+        user_data.setdefault('last_login', 'N/A')
+        user_data.setdefault('created_at', 'N/A')
+    return users
+
+
+def update_user_status(username_to_update, new_status):
+    """
+    Updates the active status of a user.
+    Returns: (bool, message)
+    """
+    users = load_users()
+    if username_to_update not in users:
+        return False, "User not found."
+
+    users[username_to_update]['active'] = new_status
+    save_users(users)
+    return True, f"User '{username_to_update}' status updated to {'active' if new_status else 'inactive'}."
+
+
+def delete_user(username_to_delete, acting_admin_username):
+    """
+    Deletes a user account.
+    Returns: (bool, message)
+    """
+    users = load_users()
 
     if username_to_delete not in users:
-        return False, f"User '{username_to_delete}' not found."
+        return False, "User not found."
 
-    # Safeguard 1: Admin cannot delete themselves
     if username_to_delete == acting_admin_username:
         return False, "You cannot delete your own account."
 
-    # Safeguard 2: Admin cannot delete the sole active admin
-    if users[username_to_delete]['role'] == 'admin': # If the target is an admin
-        active_admins = [u for u, info in users.items() if info.get('role') == 'admin' and info.get('active', True)]
-        if len(active_admins) == 1 and active_admins[0] == username_to_delete:
-            return False, "Cannot delete the sole active administrator account."
+    # If the user to be deleted is an admin, ensure at least one active admin remains
+    if users[username_to_delete].get('role') == 'admin':
+        # Count active admins *excluding* the one being deleted
+        active_admins_after_delete = sum(
+            1 for u, data in users.items()
+            if data.get('role') == 'admin' and data.get('active', True) and u != username_to_delete
+        )
+        if active_admins_after_delete == 0:
+            return False, "Cannot delete this admin. Deleting this account would leave no active administrators."
 
     del users[username_to_delete]
-    users_data["users"] = users # Ensure updated users dict is saved back
-    _save_users(users_data)
+    save_users(users)
     return True, f"User '{username_to_delete}' deleted successfully."
+

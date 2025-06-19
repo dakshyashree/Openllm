@@ -1,14 +1,25 @@
+# app.py
 from dotenv import load_dotenv
 import os
 import streamlit as st
 from pathlib import Path
-import yaml
+import yaml  # Used for reading users.yaml to get admin count for display
 
 # Import authentication functions
-from auth import register_user, authenticate_user, change_password, get_all_users_status, update_user_status, delete_user # NEW: import delete_user
+from auth import (
+    register_user,
+    authenticate_user,
+    change_password,
+    get_all_users_status,
+    update_user_status,
+    delete_user,
+    get_admin_count,  # Import MAX_ADMIN_COUNT and get_admin_count
+    MAX_ADMIN_COUNT
+)
 
-# Import RAG functionalities
-from upload import upload_and_save_file
+# Import your existing RAG functionalities
+# Ensure these files and their dependencies (like OpenAI, Langchain, unstructured, pypdf, faiss-cpu) are installed
+from upload import upload_and_save_files  # Corrected import for multi-file upload
 from ingestion import ingest_to_faiss_per_file
 from agents.summarizer import summarize_file
 from agents.router_agent_doc import route_question as router
@@ -21,21 +32,26 @@ load_dotenv()
 # --- Streamlit Page Configuration ---
 st.set_page_config(
     page_title="OpenLLM Platform",
-    page_icon="✨",
+    page_icon="",  # Restored a meaningful icon
     layout="centered",
     initial_sidebar_state="collapsed",
 )
 
 # --- Inject Custom CSS from file ---
+# Ensure 'styles' directory and 'style.css' exist.
+# This approach makes the CSS easier to manage and modify externally.
 styles_dir = Path("styles")
-styles_dir.mkdir(exist_ok=True)
+styles_dir.mkdir(exist_ok=True)  # Create styles directory if it doesn't exist
 css_file_path = styles_dir / "style.css"
 
 if not css_file_path.exists():
+    # If the CSS file doesn't exist, create a placeholder and instruct the user.
+    # The actual CSS content needs to be pasted into this newly created file.
     with open(css_file_path, "w") as f:
-        f.write("/* Add your CSS styles here */\n")
-    st.warning(f"'{css_file_path}' was not found and has been created. Please paste your CSS into it and restart the application.")
-    st.stop()
+        f.write("/* Paste your CSS styles here from the provided block */\n")
+    st.warning(
+        f"'{css_file_path}' was not found and has been created. Please paste the CSS content provided into this file and restart the application.")
+    st.stop()  # Stop the app to prompt user to add CSS
 
 with open(css_file_path) as f:
     st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
@@ -49,8 +65,8 @@ if "username" not in st.session_state:
     st.session_state.username = None
 if "role" not in st.session_state:
     st.session_state.role = None
-if "page" not in st.session_state: # NEW: To manage current page
-    st.session_state.page = "Main App" # Default page
+if "page" not in st.session_state:  # To manage current active page/tab in the main app
+    st.session_state.page = "Main App"  # Default page after login/when not logged in
 
 if "doc_qa_history" not in st.session_state:
     st.session_state.doc_qa_history = []
@@ -63,18 +79,18 @@ if "global_qa_history" not in st.session_state:
 # ────────────────────────────────────────────────────────────────────────────────
 def login_page():
     """
-    Renders the login interface.
+    Renders the login interface with a professional layout.
     """
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        st.markdown("<h2 style='text-align: center;'>Secure Access</h2>", unsafe_allow_html=True)
-        st.markdown("<p style='text-align: center;'>Enter your credentials to access the platform.</p>",
+        st.markdown("<h2 style='text-align: center;'> Secure Access</h2>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center;'>Please enter your credentials to access the OpenLLM platform.</p>",
                     unsafe_allow_html=True)
 
         with st.form("login_form"):
-            username = st.text_input("Username", key="login_username_input", placeholder="Enter username")
+            username = st.text_input("Username", key="login_username_input", placeholder="Enter your username")
             password = st.text_input("Password", type="password", key="login_password_input",
-                                     placeholder="Enter password")
+                                     placeholder="Enter your password")
 
             st.markdown("---")
             login_button = st.form_submit_button("Sign In", use_container_width=True)
@@ -86,7 +102,7 @@ def login_page():
                     st.session_state.logged_in = True
                     st.session_state.username = username
                     st.session_state.role = role
-                    st.session_state.page = "Main App" # Redirect to main app after login
+                    st.session_state.page = "Main App"  # Redirect to main app after login
                     st.rerun()
                 else:
                     st.error(message)
@@ -97,14 +113,29 @@ def login_page():
 
 def register_page():
     """
-    Renders the registration interface.
+    Renders the registration interface with a professional layout,
+    including role selection and admin cap logic.
     """
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         st.markdown("<h2 style='text-align: center;'>Create OpenLLM Account</h2>", unsafe_allow_html=True)
         st.markdown(
-            "<p style='text-align: center;'>Create a new user account. Your role will be assigned automatically.</p>",
+            "<p style='text-align: center;'>Join our platform by creating a new user account. Select your desired role below.</p>",
             unsafe_allow_html=True)
+
+        current_admin_count = get_admin_count()
+        admin_slots_available = MAX_ADMIN_COUNT - current_admin_count
+
+        # Prepare role options and default selection
+        role_options_labels = ["QA User"]  # QA User is always an option
+        default_role_index = 0  # Default to QA User
+
+        if admin_slots_available > 0:
+            role_options_labels.insert(0, "Admin")  # Add Admin as the first option if available
+            st.info(f"Admin slots available: **{admin_slots_available}** out of **{MAX_ADMIN_COUNT}**.")
+            default_role_index = 0  # Admin will be the default pre-selection if available
+        # The explicit warning when admin slots are full is removed as per previous request.
+        # UI dynamically removes the 'Admin' option instead.
 
         with st.form("register_form"):
             new_username = st.text_input("New Username", key="register_username_input",
@@ -112,29 +143,24 @@ def register_page():
             new_password = st.text_input("New Password", type="password", key="register_password_input",
                                          placeholder="Create a strong password")
 
-            # --- Logic to determine and display the role ---
-            users_file = Path("users.yaml")
-            current_users_data = {}
-            if users_file.exists():
-                try:
-                    with open(users_file, 'r') as f:
-                        current_users_data = yaml.safe_load(f) or {}
-                except yaml.YAMLError:
-                    st.warning("Could not read users.yaml to accurately determine next role. Assuming QA by default.")
-                    current_users_data = {"users": {}} # Ensure it's a dict for safety
-
-            current_users = current_users_data.get("users", {}) # Get the 'users' key
-            predicted_role = "admin" if not current_users else "qa_user"
-            st.info(f"You will be registered as: **{predicted_role.replace('_', ' ').capitalize()}**")
-            # --- End Logic ---
+            selected_role_label = st.radio(
+                "Select your desired role:",
+                options=role_options_labels,
+                index=default_role_index,  # Set default selection based on availability
+                key="register_role_select"
+            )
+            # Map the selected label back to the internal role string ('admin' or 'qa')
+            selected_role = "admin" if selected_role_label == "Admin" else "qa"
 
             st.markdown("---")
             register_button = st.form_submit_button("Register Account", use_container_width=True)
 
             if register_button:
-                success, message = register_user(new_username, new_password)
+                # Pass the selected_role to the register_user function
+                success, message = register_user(new_username, new_password, selected_role)
                 if success:
                     st.success(message)
+                    st.info("Account created successfully! You can now log in.")
                 else:
                     st.error(message)
 
@@ -149,87 +175,109 @@ def admin_user_management_page():
     """
     Dedicated page for Admin User Management.
     """
-    st.markdown(f"<h1 style='text-align: center; color: var(--neon-accent);'>Admin User Management</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center;'>View and manage user accounts: activate, deactivate, or delete users.</p>", unsafe_allow_html=True)
+    st.markdown(f"<h1 style='text-align: center; color: var(--primary-color);'>Admin User Management</h1>",
+                unsafe_allow_html=True)
+    st.markdown(
+        "<p style='text-align: center;'>View and manage user accounts: activate, deactivate, or delete users. Exercise caution with admin accounts.</p>",
+        unsafe_allow_html=True)
     st.markdown("---")
 
-    users_data = get_all_users_status()
+    users_data = get_all_users_status()  # Get all user data
     if users_data:
         st.write("#### Current User Accounts")
-        user_list = []
+        user_list_for_df = []
         for uname, info in users_data.items():
-            user_list.append({
+            user_list_for_df.append({
                 "Username": uname,
                 "Role": info.get("role", "N/A").capitalize(),
-                "Active": "✅ Active" if info.get("active", True) else "❌ Inactive",
+                "Active": "Active" if info.get("active", True) else "Inactive",
+                "Created At": info.get("created_at", "N/A"),
                 "Last Login": info.get("last_login", "N/A")
             })
-        st.dataframe(user_list, use_container_width=True)
+        st.dataframe(user_list_for_df, use_container_width=True)
 
         st.markdown("---")
         st.write("#### Change User Status")
-        col_select_status, col_status_toggle, col_button_status = st.columns([2, 1, 1])
+        col_select_status, col_status_toggle = st.columns([3, 2])  # Adjusted columns for better layout
 
         with col_select_status:
-            # Prevent current admin from deactivating themselves via this control
-            users_to_manage_status = [u for u in users_data.keys()] # All users for selection
-            selected_user_status = st.selectbox("Select User for Status Change", options=users_to_manage_status, key="select_user_to_manage_status")
-        with col_status_toggle:
+            # Users the current admin can change status for (cannot change their own via this dropdown)
+            users_for_status_change = [u for u in
+                                       users_data.keys()]  # All users for selection, logic handles self-deactivation
+            selected_user_status = st.selectbox("Select User to Change Status", options=users_for_status_change,
+                                                key="select_user_to_manage_status")
+
+        # Only show controls if a user is selected
+        if selected_user_status:
             current_active_status = users_data.get(selected_user_status, {}).get("active", True)
-            new_status = st.checkbox(f"Set to Active", value=current_active_status, key=f"user_status_checkbox_{selected_user_status}")
-        with col_button_status:
-            st.write("") # For alignment
-            st.write("")
-            if st.button(f"Update Status", key=f"update_status_button_{selected_user_status}", use_container_width=True):
-                # Ensure an admin cannot deactivate themselves if they are the sole active admin
-                if selected_user_status == st.session_state.username and not new_status and users_data[selected_user_status]['role'] == 'admin':
-                    active_admins = [u for u, info in users_data.items() if info.get('role') == 'admin' and info.get('active', True) and u != selected_user_status]
-                    if not active_admins:
-                        st.error("You cannot deactivate your own admin account if you are the sole active administrator.")
+
+            with st.container(border=True):  # Use a container for the form-like input
+                st.markdown(
+                    f"**Current Status of '{selected_user_status}':** {'Active' if current_active_status else 'Inactive'}")
+                new_status = st.checkbox(f"Set '{selected_user_status}' to Active", value=current_active_status,
+                                         key=f"user_status_checkbox_{selected_user_status}")
+
+                if st.button(f"Apply Status Change", key=f"update_status_button_{selected_user_status}",
+                             use_container_width=True):
+                    # Prevent admin from deactivating themselves if they are the sole active admin
+                    if selected_user_status == st.session_state.username and not new_status:
+                        active_admins_count = sum(1 for u, info in users_data.items() if
+                                                  info.get('role') == 'admin' and info.get('active',
+                                                                                           True) and u != selected_user_status)
+                        if users_data[selected_user_status]['role'] == 'admin' and active_admins_count == 0:
+                            st.error(
+                                "You cannot deactivate your own admin account if you are the sole active administrator remaining.")
+                            st.rerun()  # Rerun to show error and keep status as is
+                        else:
+                            success, msg = update_user_status(selected_user_status, new_status)
+                            if success:
+                                st.success(msg)
+                                st.rerun()
+                            else:
+                                st.error(msg)
                     else:
                         success, msg = update_user_status(selected_user_status, new_status)
-                        if success:
-                            st.success(msg)
-                            st.rerun() # Rerun to refresh the user list
-                        else:
-                            st.error(msg)
-                else:
-                    success, msg = update_user_status(selected_user_status, new_status)
-                    if success:
-                        st.success(msg)
-                        st.rerun() # Rerun to refresh the user list
-                    else:
-                        st.error(msg)
-
-        st.markdown("---")
-        st.write("#### Delete User")
-        col_select_delete, col_button_delete = st.columns([3, 1])
-
-        with col_select_delete:
-            # Prevent current admin from appearing in delete list to reinforce 'cannot delete self'
-            users_to_delete = [u for u in users_data.keys() if u != st.session_state.username]
-            if not users_to_delete:
-                st.info("No other users to delete.")
-            else:
-                selected_user_delete = st.selectbox("Select User to Delete", options=users_to_delete, key="select_user_to_delete")
-        with col_button_delete:
-            st.write("") # For alignment
-            st.write("")
-            if st.button(f"Delete {selected_user_delete}", key=f"delete_user_button_{selected_user_delete}", use_container_width=True, type="secondary"): # Use type="secondary" for delete button
-                if st.session_state.username == selected_user_delete: # Double check, though UI should prevent this
-                    st.error("You cannot delete your own account.")
-                elif users_data[selected_user_delete]['role'] == 'admin': # Additional check for deleting other admins
-                    active_admins_after_delete = [u for u, info in users_data.items() if info.get('role') == 'admin' and info.get('active', True) and u != selected_user_delete]
-                    if not active_admins_after_delete: # If no active admins remain after this deletion
-                        st.error(f"Cannot delete '{selected_user_delete}'. Deleting this admin would leave no active administrator account.")
-                    else:
-                        success, msg = delete_user(selected_user_delete, st.session_state.username)
                         if success:
                             st.success(msg)
                             st.rerun()
                         else:
                             st.error(msg)
-                else: # Non-admin user deletion
+
+        st.markdown("---")
+        st.write("#### Delete User Account")
+        col_select_delete, col_button_delete = st.columns([3, 1])
+
+        with col_select_delete:
+            # Prevent current admin from appearing in delete list to reinforce 'cannot delete self'
+            users_to_delete_options = [u for u in users_data.keys() if u != st.session_state.username]
+            if not users_to_delete_options:
+                st.info("No other user accounts to delete.")
+                selected_user_delete = None  # No user to select
+            else:
+                selected_user_delete = st.selectbox("Select User to Permanently Delete",
+                                                    options=users_to_delete_options, key="select_user_to_delete")
+
+        if selected_user_delete:
+            with col_button_delete:
+                st.write("")  # For alignment
+                st.write("")
+                if st.button(f"Delete '{selected_user_delete}'", key=f"delete_user_button_{selected_user_delete}",
+                             use_container_width=True, type="secondary"):
+                    # Additional checks before actual deletion
+                    # Check if deleting another admin would leave no active admins
+                    if users_data[selected_user_delete]['role'] == 'admin':
+                        active_admins_count = sum(
+                            1 for u, info in users_data.items()
+                            if info.get('role') == 'admin' and info.get('active', True) and u != selected_user_delete
+                            # Exclude user being deleted
+                        )
+                        if active_admins_count == 0:
+                            st.error(
+                                f"Cannot delete '{selected_user_delete}'. Deleting this admin would leave no active administrator account.")
+                            st.rerun()
+                            return  # Stop further execution
+
+                    # Proceed with deletion if checks pass
                     success, msg = delete_user(selected_user_delete, st.session_state.username)
                     if success:
                         st.success(msg)
@@ -237,7 +285,7 @@ def admin_user_management_page():
                     else:
                         st.error(msg)
     else:
-        st.info("No users registered yet.")
+        st.info("No users registered yet to manage.")
 
     st.markdown("---")
 
@@ -249,53 +297,63 @@ def main_rag_app_page():
     """
     Displays the core RAG functionalities.
     """
-    st.markdown(f"<h1 style='text-align: center; color: var(--neon-primary);'>OpenLLM Insight Platform</h1>",
+    st.markdown(f"<h1 style='text-align: center; color: var(--primary-color);'>OpenLLM Insight Platform</h1>",
                 unsafe_allow_html=True)
     st.markdown(
-        f"<p style='text-align: center; color: var(--text);'>Welcome, {st.session_state.username}. Your access level: <b>{st.session_state.role.capitalize()}</b></p>",
+        f"<p style='text-align: center; color: var(--text-color);'>Welcome, {st.session_state.username}! Your access level: <b>{st.session_state.role.capitalize()}</b></p>",
         unsafe_allow_html=True)
     st.markdown("---")
 
     # 1) Upload + per-file FAISS ingestion + summarization (Admin Only)
     if st.session_state.role == 'admin':
-        st.subheader("Document Management & Ingestion")
+        st.subheader("⬆ Document Management & Ingestion")
         st.markdown(
-            "<p>Administrators can upload new documents (PDF/TXT) to expand the knowledge base. The system will automatically ingest them for QA and generate summaries.</p>",
+            "<p>Administrators can upload new documents (PDF, TXT, DOCX, CSV, XLSX, Images) to expand the knowledge base. The system will automatically ingest them for QA and generate summaries.</p>",
             unsafe_allow_html=True)
 
         with st.container(border=True):
             st.markdown("### Upload Files")
-            file_path: Path | None = upload_and_save_file()
-            if file_path:
-                stem = file_path.stem
+            # Calling the multi-file upload function
+            uploaded_file_paths: list[Path] = upload_and_save_files()
 
-                st.info(f"Ingesting `{file_path.name}` into FAISS. This may take a moment.")
-                try:
-                    ingest_to_faiss_per_file(file_path, base_dir="document_index")
-                    st.success(f"Ingestion complete. Document index created at `document_index/{stem}`.")
-                except Exception as e:
-                    st.error(f"Error during ingestion: {e}")
-                    # st.stop() # Only stop if critical, otherwise allow app to continue with error message
+            if uploaded_file_paths:
+                st.write(f"Initiating processing for {len(uploaded_file_paths)} file(s)...")
+                for file_path in uploaded_file_paths:  # Iterate through each uploaded file
+                    stem = file_path.stem
 
-                # automatic summary
-                st.markdown("---")
-                st.markdown("### Automatic Summary")
-                st.write("Generating an automatic summary for the uploaded document:")
-                try:
-                    summary = summarize_file(file_path)
-                    st.markdown(summary)
-                    st.success("Summary generated successfully.")
-                except Exception as e:
-                    st.warning(
-                        f"Summarization failed: {e}. Ensure your summarizer agent is configured correctly.")
+                    st.info(f"▶ Ingesting `{file_path.name}` into FAISS… This may take a moment.")
+                    try:
+                        ingest_to_faiss_per_file(file_path, base_dir="document_index")
+                        st.success(
+                            f"Ingestion complete for `{file_path.name}`. Index created at `document_index/{stem}`.")
+                    except Exception as e:
+                        st.error(f"Error during ingestion for `{file_path.name}`: {e}")
+                        # Continue to next file even if one fails
+                        continue
+
+                    # automatic summary
+                    st.markdown("---")
+                    st.markdown(f"### Automatic Summary for `{file_path.name}`")
+                    st.write("Generating an automatic summary:")
+                    try:
+                        summary = summarize_file(file_path)
+                        st.markdown(summary)
+                        st.success(f"Summary generated successfully for `{file_path.name}`.")
+                    except Exception as e:
+                        st.warning(
+                            f"⚠ Summarization failed for `{file_path.name}`: {e}. Please ensure your summarizer agent is configured correctly.")
+                st.success("All selected files have been processed for ingestion and summarization (if applicable).")
         st.markdown("---")
-
+    else:
+        st.subheader("Document Upload Access")
+        st.warning(
+            "You do not have permission to upload documents. This feature is restricted to **Admin** users to maintain data integrity.")
 
     # 2) Per-document QA via router (with memory) - Accessible to all logged-in users
     index_root = Path("document_index")
     available = [d.name for d in index_root.iterdir() if d.is_dir()] if index_root.exists() else []
 
-    st.subheader("Query Specific Documents")
+    st.subheader("🔎 Query Specific Documents")
     st.markdown("<p>Select a document from the dropdown to ask targeted questions and retrieve precise answers.</p>",
                 unsafe_allow_html=True)
 
@@ -303,7 +361,8 @@ def main_rag_app_page():
         with st.container(border=True):
             chosen = st.selectbox("Choose document for QA", options=available, key="qa_specific_doc_select",
                                   help="Select a document to query.")
-            question = st.text_input("Enter your question about the selected document:", key="qa_specific_doc_question",
+            question = st.text_input("Enter your question about the selected document:",
+                                     key="qa_specific_doc_question",
                                      placeholder="e.g., What are the key findings?")
 
             if st.button("Run QA on Selected Document", key="run_qa_selected_button", use_container_width=True):
@@ -355,10 +414,10 @@ def main_rag_app_page():
                     stem = sp.stem.removesuffix(".summary")
                     docs.append(Document(page_content=text, metadata={"stem": stem}))
 
-                api_key = os.getenv("OPENAI_KEY")
+                api_key = os.getenv("OPENAI_API_KEY")  # Ensure this matches your .env key name
                 if not api_key:
                     st.error(
-                        "`OPENAI_KEY` environment variable is not set. Please set it to proceed with global QA.")
+                        "`OPENAI_API_KEY` environment variable is not set. Please set it to proceed with global QA.")
                     # st.stop() # Only stop if critical, otherwise allow app to continue with error message
 
                 try:
@@ -400,6 +459,7 @@ def main_rag_app_page():
 # ────────────────────────────────────────────────────────────────────────────────
 # Main App Flow: Authentication vs. Main App
 # ────────────────────────────────────────────────────────────────────────────────
+# Display a welcoming header that appears before login/register tabs
 st.markdown("<h1 style='text-align: center; color: var(--primary-color);'>Welcome to OpenLLM</h1>",
             unsafe_allow_html=True)
 st.markdown(
@@ -410,7 +470,7 @@ st.markdown("---")
 if st.session_state.logged_in:
     # --- Sidebar Navigation ---
     st.sidebar.markdown("### Navigation")
-    # Determine which pages are available
+    # Determine which pages are available based on role
     pages = ["Main App"]
     if st.session_state.role == 'admin':
         pages.append("Admin User Management")
@@ -418,21 +478,23 @@ if st.session_state.logged_in:
     selected_page = st.sidebar.radio(
         "Go to",
         options=pages,
-        index=pages.index(st.session_state.page) if st.session_state.page in pages else 0, # Set default to current page
+        # Set default to current page or 'Main App' if current page is no longer valid for the role
+        index=pages.index(st.session_state.page) if st.session_state.page in pages else 0,
         key="main_navigation_radio"
     )
-    st.session_state.page = selected_page # Update session state with selected page
+    st.session_state.page = selected_page  # Update session state with selected page
 
     # --- Render Page Content Based on Selection ---
     if st.session_state.page == "Main App":
         main_rag_app_page()
     elif st.session_state.page == "Admin User Management":
-        if st.session_state.role == 'admin': # Double-check role for admin page access
+        if st.session_state.role == 'admin':  # Double-check role for admin page access
             admin_user_management_page()
         else:
+            # This should ideally not happen if navigation is controlled, but as a fallback
             st.error("Access Denied: You do not have permission to view this page.")
-            st.session_state.page = "Main App" # Redirect non-admins back
-            st.rerun()
+            st.session_state.page = "Main App"  # Redirect non-admins back
+            st.rerun()  # Rerun to force redirection
 
     # --- User Profile and Logout always visible in sidebar when logged in ---
     st.sidebar.markdown("---")
@@ -445,24 +507,25 @@ if st.session_state.logged_in:
         st.write("Update your account password.")
         current_password = st.text_input("Current Password", type="password", key="sidebar_current_password_input")
         new_password = st.text_input("New Password", type="password", key="sidebar_new_password_input")
-        confirm_new_password = st.text_input("Confirm New Password", type="password", key="sidebar_confirm_new_password_input")
+        confirm_new_password = st.text_input("Confirm New Password", type="password",
+                                             key="sidebar_confirm_new_password_input")
 
         if st.button("Update Password", use_container_width=True, key="sidebar_update_password_button"):
             if not current_password or not new_password or not confirm_new_password:
                 st.error("All password fields are required.")
             elif new_password != confirm_new_password:
                 st.error("New password and confirmation do not match.")
-            elif len(new_password) < 6: # Simple password strength check
+            elif len(new_password) < 6:  # Simple password strength check
                 st.error("New password must be at least 6 characters long.")
             else:
                 success, message = change_password(st.session_state.username, current_password, new_password)
                 if success:
                     st.success(message)
                     # Clear inputs after successful change by resetting session state keys
-                    st.session_state.sidebar_current_password_input = ""
-                    st.session_state.sidebar_new_password_input = ""
-                    st.session_state.sidebar_confirm_new_password_input = ""
-                    st.rerun() # Rerun to ensure inputs clear visibly
+                    st.session_state["sidebar_current_password_input"] = ""
+                    st.session_state["sidebar_new_password_input"] = ""
+                    st.session_state["sidebar_confirm_new_password_input"] = ""
+                    st.rerun()  # Rerun to ensure inputs clear visibly
                 else:
                     st.error(message)
 
@@ -471,10 +534,10 @@ if st.session_state.logged_in:
         st.session_state.logged_in = False
         st.session_state.username = None
         st.session_state.role = None
-        st.session_state.page = "Main App" # Reset page on logout
+        st.session_state.page = "Main App"  # Reset page on logout
         st.rerun()
 
-else: # Not logged in
+else:  # Not logged in, show login/register tabs
     st.markdown("<h1 style='text-align: center; color: var(--primary-color);'>Welcome to OpenLLM</h1>",
                 unsafe_allow_html=True)
     st.markdown(
