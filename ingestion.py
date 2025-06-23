@@ -19,11 +19,12 @@ from langchain.document_loaders import (
 
 load_dotenv()
 
+
 def ingest_to_faiss_per_file(
     file_path: str | Path,
     base_dir: str = "document_index",
     chunk_size: int = 1000,
-    chunk_overlap: int = 100
+    chunk_overlap: int = 100,
 ) -> Path:
     """
     Ingest a single file into its own FAISS index under base_dir/<file_stem>/.
@@ -40,10 +41,13 @@ def ingest_to_faiss_per_file(
     if suffix == ".csv":
         # pandas‐based CSV fallback
         import pandas as pd
+
         try:
             df = pd.read_csv(file_path).fillna("")  # read first
             markdown = df.to_markdown(index=False)
-            docs = [ Document(page_content=markdown, metadata={"source": str(file_path)}) ]
+            docs = [
+                Document(page_content=markdown, metadata={"source": str(file_path)})
+            ]
         except Exception as e:
             raise RuntimeError(f"Failed to read CSV {file_path}: {e}")
     else:
@@ -63,8 +67,7 @@ def ingest_to_faiss_per_file(
 
     # 2) Chunk
     splitter = RecursiveCharacterTextSplitter(
-        chunk_size=chunk_size,
-        chunk_overlap=chunk_overlap
+        chunk_size=chunk_size, chunk_overlap=chunk_overlap
     )
     chunks = splitter.split_documents(docs)
 
@@ -76,8 +79,9 @@ def ingest_to_faiss_per_file(
 
     # Load existing or create new
     if (index_dir / "index.faiss").exists() and (index_dir / "index.pkl").exists():
-        vs = FAISS.load_local(str(index_dir), embeddings,
-                              allow_dangerous_deserialization=True)
+        vs = FAISS.load_local(
+            str(index_dir), embeddings, allow_dangerous_deserialization=True
+        )
         vs.add_documents(chunks)
     else:
         vs = FAISS.from_documents(chunks, embeddings)

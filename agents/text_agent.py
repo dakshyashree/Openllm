@@ -7,6 +7,7 @@ builds a RetrievalQA chain, and answers user questions.
 Expose:
     run(file_path: Path, question: str) -> str
 """
+
 from pathlib import Path
 from dotenv import load_dotenv
 import os
@@ -24,6 +25,7 @@ from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.chains.retrieval import create_retrieval_chain
 
 load_dotenv()
+
 
 # 1) Point to your TXT file
 def run(file_path: Path, question: str) -> str:
@@ -55,8 +57,7 @@ def run(file_path: Path, question: str) -> str:
     # Load embeddings and vector store
     embeddings = OpenAIEmbeddings(openai_api_key=api_key)
     vs = FAISS.load_local(
-        str(index_dir), embeddings,
-        allow_dangerous_deserialization=True
+        str(index_dir), embeddings, allow_dangerous_deserialization=True
     )
     retriever = vs.as_retriever()
 

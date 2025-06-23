@@ -11,6 +11,7 @@ from langchain_experimental.tools import PythonREPLTool, PythonAstREPLTool
 
 load_dotenv()
 
+
 def _load_csv(file_path: Path, max_header_row: int = 5) -> pd.DataFrame:
     """
     Load any CSV, auto-fixing a misplaced header and
@@ -27,7 +28,11 @@ def _load_csv(file_path: Path, max_header_row: int = 5) -> pd.DataFrame:
             continue
 
         # Score by count of "good" columns (non-empty, not Unnamed)
-        good_cols = [c for c in df_try.columns if str(c).strip() and not str(c).startswith('Unnamed')]
+        good_cols = [
+            c
+            for c in df_try.columns
+            if str(c).strip() and not str(c).startswith("Unnamed")
+        ]
         score = len(good_cols)
 
         if score > best_score:
@@ -42,8 +47,10 @@ def _load_csv(file_path: Path, max_header_row: int = 5) -> pd.DataFrame:
 
     # Parse date-like columns
     for col in best_df.columns:
-        if best_df[col].dtype == 'object':
-            parsed = pd.to_datetime(best_df[col], errors='coerce', infer_datetime_format=True)
+        if best_df[col].dtype == "object":
+            parsed = pd.to_datetime(
+                best_df[col], errors="coerce", infer_datetime_format=True
+            )
             if parsed.notna().mean() > 0.9:
                 best_df[col] = parsed
 

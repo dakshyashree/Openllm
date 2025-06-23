@@ -4,7 +4,7 @@ import hashlib
 import os
 import datetime
 
-USERS_FILE = 'users.yaml'
+USERS_FILE = "users.yaml"
 MAX_ADMIN_COUNT = 5  # Define the maximum number of admin users allowed
 
 
@@ -15,7 +15,7 @@ def load_users():
     """
     if not os.path.exists(USERS_FILE) or os.stat(USERS_FILE).st_size == 0:
         return {}
-    with open(USERS_FILE, 'r') as f:
+    with open(USERS_FILE, "r") as f:
         users = yaml.safe_load(f)
         return users if users is not None else {}
 
@@ -24,7 +24,7 @@ def save_users(users):
     """
     Saves the provided user data to the users.yaml file.
     """
-    with open(USERS_FILE, 'w') as f:
+    with open(USERS_FILE, "w") as f:
         yaml.safe_dump(users, f, default_flow_style=False)
 
 
@@ -44,7 +44,9 @@ def get_admin_count():
         int: The current number of admin users.
     """
     users = load_users()
-    admin_count = sum(1 for user_data in users.values() if user_data.get('role') == 'admin')
+    admin_count = sum(
+        1 for user_data in users.values() if user_data.get("role") == "admin"
+    )
     return admin_count
 
 
@@ -68,19 +70,22 @@ def register_user(username, password, desired_role):
     if username in users:
         return False, "Registration failed: Username already exists."
 
-    if desired_role == 'admin':
+    if desired_role == "admin":
         current_admins = get_admin_count()
         if current_admins >= MAX_ADMIN_COUNT:
             # This message should ideally not be seen if UI prevents selection
-            return False, f"Registration failed: Maximum number of admin users ({MAX_ADMIN_COUNT}) reached. Cannot register as admin."
+            return (
+                False,
+                f"Registration failed: Maximum number of admin users ({MAX_ADMIN_COUNT}) reached. Cannot register as admin.",
+            )
 
     hashed_password = hash_password(password)
     users[username] = {
-        'password': hashed_password,
-        'role': desired_role,
-        'active': True,  # New users are active by default
-        'created_at': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        'last_login': 'Never'
+        "password": hashed_password,
+        "role": desired_role,
+        "active": True,  # New users are active by default
+        "created_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "last_login": "Never",
     }
     save_users(users)
     return True, f"User '{username}' registered successfully as {desired_role}."
@@ -104,18 +109,28 @@ def authenticate_user(username, password):
         return False, "Login failed: Username not found.", None
 
     user_data = users[username]
-    if not user_data.get('active', True):  # Check if user is active
-        return False, "Login failed: Account is inactive. Please contact an administrator.", None
+    if not user_data.get("active", True):  # Check if user is active
+        return (
+            False,
+            "Login failed: Account is inactive. Please contact an administrator.",
+            None,
+        )
 
     hashed_password_input = hash_password(password)
-    if user_data['password'] == hashed_password_input:
-        user_role = user_data.get('role', 'qa')  # Default to 'qa' if role not present
+    if user_data["password"] == hashed_password_input:
+        user_role = user_data.get("role", "qa")  # Default to 'qa' if role not present
 
         # Update last_login timestamp
-        users[username]['last_login'] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        users[username]["last_login"] = datetime.datetime.now().strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
         save_users(users)
 
-        return True, f"User '{username}' logged in successfully as {user_role}.", user_role
+        return (
+            True,
+            f"User '{username}' logged in successfully as {user_role}.",
+            user_role,
+        )
     else:
         return False, "Login failed: Incorrect password.", None
 
@@ -129,10 +144,10 @@ def change_password(username, current_password, new_password):
     if username not in users:
         return False, "User not found."
 
-    if users[username]['password'] != hash_password(current_password):
+    if users[username]["password"] != hash_password(current_password):
         return False, "Incorrect current password."
 
-    users[username]['password'] = hash_password(new_password)
+    users[username]["password"] = hash_password(new_password)
     save_users(users)
     return True, "Password changed successfully."
 
@@ -146,9 +161,9 @@ def get_all_users_status():
     # Ensure 'active' status is present, default to True for display
     # Also ensure last_login and created_at are present
     for user_data in users.values():
-        user_data.setdefault('active', True)
-        user_data.setdefault('last_login', 'N/A')
-        user_data.setdefault('created_at', 'N/A')
+        user_data.setdefault("active", True)
+        user_data.setdefault("last_login", "N/A")
+        user_data.setdefault("created_at", "N/A")
     return users
 
 
@@ -161,9 +176,12 @@ def update_user_status(username_to_update, new_status):
     if username_to_update not in users:
         return False, "User not found."
 
-    users[username_to_update]['active'] = new_status
+    users[username_to_update]["active"] = new_status
     save_users(users)
-    return True, f"User '{username_to_update}' status updated to {'active' if new_status else 'inactive'}."
+    return (
+        True,
+        f"User '{username_to_update}' status updated to {'active' if new_status else 'inactive'}.",
+    )
 
 
 def delete_user(username_to_delete, acting_admin_username):
@@ -180,16 +198,21 @@ def delete_user(username_to_delete, acting_admin_username):
         return False, "You cannot delete your own account."
 
     # If the user to be deleted is an admin, ensure at least one active admin remains
-    if users[username_to_delete].get('role') == 'admin':
+    if users[username_to_delete].get("role") == "admin":
         # Count active admins *excluding* the one being deleted
         active_admins_after_delete = sum(
-            1 for u, data in users.items()
-            if data.get('role') == 'admin' and data.get('active', True) and u != username_to_delete
+            1
+            for u, data in users.items()
+            if data.get("role") == "admin"
+            and data.get("active", True)
+            and u != username_to_delete
         )
         if active_admins_after_delete == 0:
-            return False, "Cannot delete this admin. Deleting this account would leave no active administrators."
+            return (
+                False,
+                "Cannot delete this admin. Deleting this account would leave no active administrators.",
+            )
 
     del users[username_to_delete]
     save_users(users)
     return True, f"User '{username_to_delete}' deleted successfully."
-

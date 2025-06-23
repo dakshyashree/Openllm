@@ -39,6 +39,7 @@ def _load_snippet(path: Path, max_pages: int = 3, max_rows: int = 5) -> Optional
 
         elif suffix == ".csv":
             import pandas as pd
+
             df = pd.read_csv(path, nrows=max_rows).fillna("")
             texts = [df.to_markdown(index=False)]
 

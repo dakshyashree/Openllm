@@ -7,6 +7,7 @@ builds a RetrievalQA chain, and answers user questions.
 Expose:
     run(file_path: Path, question: str) -> str
 """
+
 from pathlib import Path
 from dotenv import load_dotenv
 import os
@@ -21,6 +22,7 @@ from langchain_community.embeddings import OpenAIEmbeddings
 from langchain_community.vectorstores import FAISS
 
 load_dotenv()
+
 
 def run(file_path: Path, question: str) -> str:
     """
@@ -51,8 +53,7 @@ def run(file_path: Path, question: str) -> str:
     # Load embeddings and vector store
     embeddings = OpenAIEmbeddings(openai_api_key=api_key)
     vs = FAISS.load_local(
-        str(index_dir), embeddings,
-        allow_dangerous_deserialization=True
+        str(index_dir), embeddings, allow_dangerous_deserialization=True
     )
     retriever = vs.as_retriever()
 
@@ -66,4 +67,3 @@ def run(file_path: Path, question: str) -> str:
     # You can use .run for convenience (single-string input)
     answer = retrieval_chain.invoke({"input": question})
     return answer["answer"]
-

@@ -69,7 +69,7 @@ def select_file(question: str) -> Path:
     candidate = SUMMARY_DIR / choice
     if not candidate.exists():
         # try add extension
-        for ext in [".pdf", ".csv", ".txt", ".docx"]:
+        for ext in [".pdf", ".csv", ".txt", ".docx", ".xlsx"]:
             p = SUMMARY_DIR / (choice + ext)
             if p.exists():
                 candidate = p

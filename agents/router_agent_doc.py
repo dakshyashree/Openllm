@@ -1,4 +1,3 @@
-
 """
 router_agent_doc.py
 
@@ -10,6 +9,7 @@ Supported agents:
 
 Each agent module should expose a function `run(file_path: Path, question: str) -> str`.
 """
+
 from pathlib import Path
 from typing import Callable, Dict
 
@@ -20,14 +20,15 @@ from agents.text_agent import run as run_text_agent
 
 # Mapping of file extensions to agent run functions
 EXTENSION_AGENT_MAP: Dict[str, Callable[[Path, str], str]] = {
-    ".csv":    run_csv_agent,
-    ".xls":    run_csv_agent,
-    ".xlsx":   run_csv_agent,
-    ".pdf":    run_pdf_agent,
-    ".txt":    run_text_agent,
-    ".md":     run_text_agent,
-    ".docx":   run_text_agent,
+    ".csv": run_csv_agent,
+    ".xls": run_csv_agent,
+    ".xlsx": run_csv_agent,
+    ".pdf": run_pdf_agent,
+    ".txt": run_text_agent,
+    ".md": run_text_agent,
+    ".docx": run_text_agent,
 }
+
 
 def route_question(file_path: Path, question: str) -> str:
     """

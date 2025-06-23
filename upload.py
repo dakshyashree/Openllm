@@ -11,12 +11,16 @@ try:
     import pandas as pd
 except ImportError:
     pd = None
-    st.warning("Pandas not installed. CSV/Excel previews might not work. Run `pip install pandas`")
+    st.warning(
+        "Pandas not installed. CSV/Excel previews might not work. Run `pip install pandas`"
+    )
 try:
     from docx import Document
 except ImportError:
     Document = None
-    st.warning("python-docx not installed. DOCX previews might not work. Run `pip install python-docx`")
+    st.warning(
+        "python-docx not installed. DOCX previews might not work. Run `pip install python-docx`"
+    )
 
 
 def upload_and_save_files(upload_dir: str = "uploaded_files") -> list[Path]:
@@ -37,9 +41,19 @@ def upload_and_save_files(upload_dir: str = "uploaded_files") -> list[Path]:
     st.markdown("#### Upload Documents (PDF, TXT, DOCX, CSV, XLSX, Image)")
     uploaded_files = st.file_uploader(
         "Choose files to upload:",
-        type=["pdf", "txt", "docx", "csv", "xlsx", "png", "jpg", "jpeg", "gif"],  # Expanded types
+        type=[
+            "pdf",
+            "txt",
+            "docx",
+            "csv",
+            "xlsx",
+            "png",
+            "jpg",
+            "jpeg",
+            "gif",
+        ],  # Expanded types
         accept_multiple_files=True,  # Allow multiple file selection
-        help="Select one or more documents from your computer. Supported formats include PDF, TXT, DOCX, CSV, XLSX, and common image formats."
+        help="Select one or more documents from your computer. Supported formats include PDF, TXT, DOCX, CSV, XLSX, and common image formats.",
     )
 
     saved_file_paths = []
@@ -55,7 +69,9 @@ def upload_and_save_files(upload_dir: str = "uploaded_files") -> list[Path]:
                     with open(save_path, "wb") as f:
                         f.write(uploaded_file.getbuffer())
                     saved_file_paths.append(save_path)
-                    st.success(f"File '{filename}' saved successfully to `{save_path}`.")
+                    st.success(
+                        f"File '{filename}' saved successfully to `{save_path}`."
+                    )
                 except Exception as e:
                     st.error(f"Error saving '{filename}': {e}")
                     continue  # Skip to the next file if saving fails
@@ -67,7 +83,9 @@ def upload_and_save_files(upload_dir: str = "uploaded_files") -> list[Path]:
             mime_type, _ = mimetypes.guess_type(save_path)
 
             try:
-                if filename.lower().endswith(".txt") or (mime_type and mime_type.startswith("text")):
+                if filename.lower().endswith(".txt") or (
+                    mime_type and mime_type.startswith("text")
+                ):
                     content = uploaded_file.getvalue().decode("utf-8", errors="ignore")
                     st.text(content[:1000] + "..." if len(content) > 1000 else content)
                     if len(content) > 1000:
@@ -77,14 +95,20 @@ def upload_and_save_files(upload_dir: str = "uploaded_files") -> list[Path]:
                     try:
                         reader = PdfReader(save_path)
                         # Extract text from first 2 pages for preview
-                        preview_text = "\n".join(page.extract_text() or "" for page in reader.pages[:2])
+                        preview_text = "\n".join(
+                            page.extract_text() or "" for page in reader.pages[:2]
+                        )
                         st.text(preview_text.strip()[:2000] + "...")
                         if len(preview_text.strip()) > 2000:
-                            st.caption("Showing first 2000 characters from first 2 pages.")
+                            st.caption(
+                                "Showing first 2000 characters from first 2 pages."
+                            )
                         elif not preview_text.strip():
                             st.info("PDF has no readable text content for preview.")
                     except Exception as pdf_e:
-                        st.warning(f"⚠ Could not extract text from PDF for preview: {pdf_e}")
+                        st.warning(
+                            f"⚠ Could not extract text from PDF for preview: {pdf_e}"
+                        )
 
                 elif filename.lower().endswith(".csv") and pd:
                     df = pd.read_csv(save_path)
@@ -106,10 +130,16 @@ def upload_and_save_files(upload_dir: str = "uploaded_files") -> list[Path]:
                         st.info("DOCX file has no readable text content for preview.")
 
                 elif mime_type and mime_type.startswith("image"):
-                    st.image(str(save_path), caption=f"Image: {filename}", use_column_width=True)
+                    st.image(
+                        str(save_path),
+                        caption=f"Image: {filename}",
+                        use_column_width=True,
+                    )
 
                 else:
-                    st.info(f"File '{filename}' saved, but preview not supported for this format (MIME: {mime_type}).")
+                    st.info(
+                        f"File '{filename}' saved, but preview not supported for this format (MIME: {mime_type})."
+                    )
             except Exception as e:
                 st.warning(f"⚠ An error occurred during preview for '{filename}': {e}")
 
@@ -133,4 +163,3 @@ if __name__ == "__main__":
         st.success(f"All selected files processed. Total saved: {len(uploaded_paths)}.")
     else:
         st.info("No files uploaded yet.")
-
