@@ -1,12 +1,18 @@
-pandas
-python-dotenv
-streamlit
-langchain # Includes langchain_core, and provides base for other langchain packages
-langchain-openai # For OpenAI models and embeddings
-langchain-community # For FAISS, various document loaders, etc.
-langchain-experimental # If you use experimental features (e.g., specific agents)
-pypdf2 # For basic PDF operations, if needed explicitly
-unstructured[all] # For robust document parsing, especially PDFs and various text types
-bcrypt # For password hashing in auth.py
-PyYAML # For reading/writing YAML files (users.yaml)
+bcrypt
+bitsandbytes
+faiss-cpu
+langchain
+langchain-community
+langchain-experimental
+langchain-openai
 mimetypes
+pandas
+pypdf2
+Pillow
+python-dotenv
+PyYAML
+streamlit
+torch
+transformers
+unstructured[all]
+timm

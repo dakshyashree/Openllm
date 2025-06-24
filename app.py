@@ -7,6 +7,8 @@ import yaml  # Used for reading users.yaml to get admin count for display
 import zipfile  # Import zipfile module for ZIP handling
 import shutil  # For removing directories
 
+from agents.image_chat_agent import run_image_agent
+
 # Import authentication functions
 from auth import (
     register_user,
@@ -577,75 +579,83 @@ def main_rag_app_page():
                 st.success(
                     "All selected individual files have been processed for ingestion and summarization (if applicable)."
                 )
+            st.markdown("---")
+            st.markdown(
+                "#### For images, upload below.",
+                unsafe_allow_html=True,
+            )
+
+            # ----- New Image Upload + Summary (Admin only) -----
+            image_file = st.file_uploader(
+                "Upload Image", type=["png", "jpg", "jpeg"], key="admin_image_upload"
+            )
+            if image_file:
+                # 1) Save the image
+                img_path = Path("uploaded_files") / image_file.name
+                with open(img_path, "wb") as f:
+                    f.write(image_file.getbuffer())
+
+                # 2) Show it
+                st.image(img_path, caption="…", use_container_width=True)
+
+                # 3) Run your agent to get a summary
+                summary = run_image_agent(
+                    str(img_path), "Provide a concise summary of this image."
+                )
+
+                # 4) Persist & display
+                summary_file = img_path.with_suffix(img_path.suffix + ".summary.txt")
+                summary_file.write_text(summary)
+                st.markdown(f"**Image Summary:**  \n{summary}")
 
         st.markdown("---")
 
-    # 2) Per-document QA via router (with memory) - Accessible to all logged-in users
-    index_root = Path("document_index")
-    available = (
-        [d.name for d in index_root.iterdir() if d.is_dir()]
-        if index_root.exists()
-        else []
-    )
+    # 2) Query Specific Files (Documents + Images)
+    UPLOAD_DIR = Path("uploaded_files")
+    INDEX_ROOT = Path("document_index")
 
-    st.subheader("Query Specific Documents")
+    # Build options:
+    doc_options = [d.name for d in INDEX_ROOT.iterdir() if d.is_dir()]
+    image_options = [
+        f.name
+        for f in UPLOAD_DIR.iterdir()
+        if f.suffix.lower() in (".png", ".jpg", ".jpeg", ".gif")
+    ]
+    available = doc_options + image_options
+
+    st.subheader("Query Specific Files")
     st.markdown(
-        "<p>Select a document from the dropdown to ask targeted questions and retrieve precise answers.</p>",
+        "<p>Select a file (document or image) from the dropdown to ask targeted questions.</p>",
         unsafe_allow_html=True,
     )
 
     if available:
-        with st.container(border=True):
-            chosen = st.selectbox(
-                "Choose document for QA",
-                options=available,
-                key="qa_specific_doc_select",
-                help="Select a document to query.",
-            )
-            question = st.text_input(
-                "Enter your question about the selected document:",
-                key="qa_specific_doc_question",
-                placeholder="e.g., What are the key findings?",
-            )
+        choice = st.selectbox("Choose file for QA", options=available, key="specific_file_select")
+        question = st.text_input("Enter your question:", key="specific_file_question")
 
-            if st.button(
-                "Run QA on Selected Document",
-                key="run_qa_selected_button",
-                use_container_width=True,
-            ):
-                upload_dir = Path("uploaded_files")
-                matches = list(upload_dir.glob(f"{chosen}.*"))
+        if st.button("Run QA", key="run_specific_file_button"):
+            # Determine if it's an image or a document
+            if choice in image_options:
+                # Image: hand off directly to the image agent
+                img_path = UPLOAD_DIR / choice
+                with st.spinner("Analyzing image…"):
+                    answer = run_image_agent(str(img_path), question)
+                st.markdown(f"**Answer (from image `{choice}`):**\n\n{answer}")
+            else:
+                # Document: find its FAISS index and use router
+                file_stem = choice
+                # Find the original file in uploads (pdf, txt, etc)
+                matches = list(UPLOAD_DIR.glob(f"{file_stem}.*"))
                 if not matches:
-                    st.error(
-                        f"No original uploaded file found for ‘{chosen}’. Ensure it was uploaded correctly."
-                    )
+                    st.error(f"No upload found for `{file_stem}`.")
                 else:
-                    try:
-                        with st.spinner(f"Analyzing '{chosen}' to find the answer..."):
-                            answer = router(matches[0], question)
-                            st.session_state.doc_qa_history.append(
-                                (chosen, question, answer)
-                            )
-                            st.markdown(f"**Answer (from `{chosen}`):** \n{answer}")
-                            st.success("Query complete.")
-                    except Exception as e:
-                        st.error(
-                            f"QA Error: {e}. Please check the document and your question."
-                        )
+                    # Prefer non-summary file
+                    file_path = next((m for m in matches if not m.name.endswith(".summary.txt")), matches[0])
+                    with st.spinner("Retrieving answer from document…"):
+                        answer = router(file_path, question)
+                    st.markdown(f"**Answer (from document `{file_stem}`):**\n\n{answer}")
     else:
-        st.info(
-            "No documents are currently indexed for specific QA. Please upload files (Admin only)."
-        )
-
-    # display memory
-    if st.session_state.doc_qa_history:
-        st.write("#### Previous Per-Document Queries")
-        with st.expander("View Document-Specific Q&A History"):
-            for doc_stem, q, a in reversed(st.session_state.doc_qa_history):
-                st.markdown(f"**Document:** `{doc_stem}`\n**Q:** {q}  \n**A:** {a}")
-                st.markdown("---")
-
-    st.markdown("---")
+        st.info("No documents or images available. Please upload as admin.")
 
     # 3) Global QA across all documents (with memory) - Accessible to all logged-in users
     st.subheader("Global Knowledge Base Query")

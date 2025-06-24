@@ -7,7 +7,7 @@ from typing import Optional
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import PromptTemplate
-from langchain.document_loaders import (
+from langchain_community.document_loaders  import (
     PyPDFLoader,
     TextLoader,
     CSVLoader,

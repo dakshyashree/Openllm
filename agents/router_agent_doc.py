@@ -6,6 +6,7 @@ Supported agents:
 - CSV Agent (.csv, .xls, .xlsx)
 - PDF Agent (.pdf)
 - Text Agent (.txt, .md, .docx)
+- Image Agent (.png, .jpg, .jpeg)
 
 Each agent module should expose a function `run(file_path: Path, question: str) -> str`.
 """
@@ -17,9 +18,11 @@ from typing import Callable, Dict
 from agents.csv_agent import run as run_csv_agent
 from agents.DocsPdf_agent import run as run_pdf_agent
 from agents.text_agent import run as run_text_agent
+from agents.image_chat_agent import run_image_agent
 
 # Mapping of file extensions to agent run functions
 EXTENSION_AGENT_MAP: Dict[str, Callable[[Path, str], str]] = {
+    # Document formats
     ".csv": run_csv_agent,
     ".xls": run_csv_agent,
     ".xlsx": run_csv_agent,
@@ -27,6 +30,10 @@ EXTENSION_AGENT_MAP: Dict[str, Callable[[Path, str], str]] = {
     ".txt": run_text_agent,
     ".md": run_text_agent,
     ".docx": run_text_agent,
+    # Image formats
+    ".png": run_image_agent,
+    ".jpg": run_image_agent,
+    ".jpeg": run_image_agent,
 }
 
 
@@ -35,7 +42,7 @@ def route_question(file_path: Path, question: str) -> str:
     Routes the question to the correct agent based on the file extension.
 
     Args:
-        file_path (Path): Path to the document file.
+        file_path (Path): Path to the file (document or image).
         question (str): User's query string.
 
     Returns:

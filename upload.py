@@ -38,7 +38,7 @@ def upload_and_save_files(upload_dir: str = "uploaded_files") -> list[Path]:
     UPLOAD_DIR = Path(upload_dir)
     UPLOAD_DIR.mkdir(exist_ok=True)  # Ensure the directory exists
 
-    st.markdown("#### Upload Documents (PDF, TXT, DOCX, CSV, XLSX, Image)")
+    st.markdown("#### Upload Documents (PDF, TXT, DOCX, CSV, XLSX)")
     uploaded_files = st.file_uploader(
         "Choose files to upload:",
         type=[
@@ -47,13 +47,9 @@ def upload_and_save_files(upload_dir: str = "uploaded_files") -> list[Path]:
             "docx",
             "csv",
             "xlsx",
-            "png",
-            "jpg",
-            "jpeg",
-            "gif",
         ],  # Expanded types
         accept_multiple_files=True,  # Allow multiple file selection
-        help="Select one or more documents from your computer. Supported formats include PDF, TXT, DOCX, CSV, XLSX, and common image formats.",
+        help="Select one or more documents from your computer. Supported formats include PDF, TXT, DOCX, CSV, XLSX.",
     )
 
     saved_file_paths = []

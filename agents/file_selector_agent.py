@@ -10,28 +10,28 @@ load_dotenv()
 SUMMARY_DIR = Path("uploaded_files")
 
 # LLM config
-API_KEY = os.getenv("OPENAI_KEY")
+API_KEY = os.getenv("OPENAI_KEY") or os.getenv("OPENAI_API_KEY")
 MODEL = "gpt-4o"
 TEMP = 0
 
 # Prompt to choose best file based on summaries and question
 SELECT_PROMPT = PromptTemplate.from_template(
     """
-You are a document selector. You have the following document summaries:
+You are a document and image selector. You have the following summaries:
 
 {summaries}
 
 Given the user question:
 {question}
 
-Which single document (provide only its filename) is most likely to contain the answer? If none apply, respond with 'none'.
+Which single file (provide only its filename with extension) is most likely to contain the answer? If none apply, respond with 'none'.
 """
 )
 
 
 def select_file(question: str) -> Path:
     """
-    Chooses the best file to answer the question based on precomputed summaries.
+    Chooses the best file (document or image) to answer the question based on precomputed summaries.
 
     Args:
         question (str): The user's question.
@@ -40,7 +40,7 @@ def select_file(question: str) -> Path:
         Path: Path to the selected file under uploaded_files/, or raises if none found.
     """
     if not API_KEY:
-        raise RuntimeError("OPENAI_KEY env var not set")
+        raise RuntimeError("OPENAI_KEY environment variable is not set")
 
     # Gather all summaries
     entries = []
@@ -59,21 +59,23 @@ def select_file(question: str) -> Path:
     chain = SELECT_PROMPT | llm
     inputs = {"summaries": summaries_block, "question": question}
     result = chain.invoke(inputs)
-    choice = result.get("text", "").strip()
+    choice = (result.get("text") or result).strip()
 
     # Interpret result
     if choice.lower() == "none":
-        raise ValueError("No suitable document found for this question.")
+        raise ValueError("No suitable file found for this question.")
 
     # Match filename in uploaded_files
     candidate = SUMMARY_DIR / choice
     if not candidate.exists():
-        # try add extension
-        for ext in [".pdf", ".csv", ".txt", ".docx", ".xlsx"]:
+        # Try appending extensions for docs and images
+        extensions = [".pdf", ".csv", ".txt", ".docx", ".xlsx", ".png", ".jpg", ".jpeg"]
+        for ext in extensions:
             p = SUMMARY_DIR / (choice + ext)
             if p.exists():
                 candidate = p
                 break
+
     if not candidate.exists():
         raise FileNotFoundError(f"Selected file '{choice}' not found in {SUMMARY_DIR}")
 
